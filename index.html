@@ -105,6 +105,7 @@ input,select,textarea{width:100%;font-size:16px;padding:10px;border:1px solid va
 .spotpin div{font-size:18px;width:30px;height:30px;background:#fff;border:2px solid #f5a524;border-radius:50%;box-shadow:0 1px 4px #0008;display:flex;align-items:center;justify-content:center}
 .darkmap .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.85) contrast(.9)}
 .leaflet-control .btn{display:block;margin-bottom:6px}
+.leaflet-tooltip{font-weight:700;font-size:12px}
 .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:12px;text-align:center}
 .cal .w{font-size:12px;font-weight:800;color:var(--green)}
 .cal .d{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:50%;font-family:var(--mono);font-weight:800;font-size:16px;position:relative;border:0;background:none;color:var(--ink);padding:0}
@@ -192,6 +193,7 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
     <div class="sel chips" id="spSort" style="margin-top:8px"></div>
     <div id="spHourWrap" class="hide" style="margin-top:8px"><select id="spHour"></select></div>
   </div>
+  <div id="spMapBox" style="height:300px;border-radius:14px;overflow:hidden;background:#0d1015;margin-bottom:12px;position:relative;z-index:0"></div>
   <div class="card"><div class="ttl">付け場</div><div class="sub" style="margin:4px 0 10px">待機開始すると、近く（150m以内）の付け場に自動でひも付きます</div><div id="spList"></div></div>
 </section>
 
@@ -902,6 +904,24 @@ function spotStats(sp){
     picks:picks.length,fare,avg:picks.length?fare/picks.length:0,calls:calls.length,hours,wh,whn};
 }
 let spSort='near',spHour=new Date().getHours();
+let spListMap=null,spListLayer=null;
+async function drawSpotMap(list){
+  const ok=await loadLeaflet();if(!ok||view!=='spot')return;
+  const st=MAPSTYLES[D.settings.mapStyle]?D.settings.mapStyle:'std';
+  if(!spListMap){
+    const c=lastFix?[lastFix.lat,lastFix.lng]:(D.spots&&D.spots[0]?[D.spots[0].lat,D.spots[0].lng]:[35.676,139.763]);
+    spListMap=L.map('spMapBox',{zoomControl:true,attributionControl:false}).setView(c,14);
+    spListMap._tl=L.tileLayer(MAPSTYLES[st][1],{maxZoom:MAPSTYLES[st][2]||18}).addTo(spListMap);spListMap._st=st;
+    spListLayer=L.layerGroup().addTo(spListMap);
+    const Here=L.Control.extend({onAdd(){const b=L.DomUtil.create('button','btn sm');b.textContent='📍 現在地';b.onclick=e=>{L.DomEvent.stop(e);getPos().then(p=>p&&spListMap.setView([p.lat,p.lng],15));};return b;}});
+    new Here({position:'topright'}).addTo(spListMap);
+  }else if(spListMap._st!==st){spListMap.removeLayer(spListMap._tl);spListMap._tl=L.tileLayer(MAPSTYLES[st][1],{maxZoom:MAPSTYLES[st][2]||18}).addTo(spListMap);spListMap._st=st;}
+  $('spMapBox').classList.toggle('darkmap',st==='dark');
+  setTimeout(()=>spListMap.invalidateSize(),60);
+  spListLayer.clearLayers();
+  if(lastFix)L.circleMarker([lastFix.lat,lastFix.lng],{radius:7,color:'#fff',weight:2,fillColor:'#2563eb',fillOpacity:1}).addTo(spListLayer);
+  list.forEach(({s,st})=>{L.marker([s.lat,s.lng],{icon:L.divIcon({className:'spotpin',html:`<div>${SPOT_ICON[s.type]||'📍'}</div>`,iconSize:[30,30],iconAnchor:[15,15]})}).bindTooltip(esc(s.name),{direction:'top',offset:[0,-14]}).on('click',()=>spotDetail(s.id)).addTo(spListLayer);});
+}
 function renderSpots(){
   const q=($('spQ').value||'').trim();
   $('spSort').innerHTML=[['near','現在地周辺'],['top','実績上位'],['hour','時間帯別']].map(([k,l])=>`<button class="chip ${spSort===k?'on':''}" onclick="spSort='${k}';renderSpots()">${l}</button>`).join('');
@@ -915,6 +935,7 @@ function renderSpots(){
     return `<div class="logc" onclick="spotDetail('${s.id}')"><div class="lt"><span style="font-size:20px">${SPOT_ICON[s.type]||'📍'}</span><b style="font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(s.name)}</b><span class="sp"></span>${d!=null?`<span class="sub">${fmtDist(d)}</span>`:''}</div>
     <div class="sub" style="margin-top:4px">${hourInfo}乗車 ${st.picks}回 ・ 平均 ${st.picks?yen(st.avg):'-'} ・ 待機 ${st.waits}回${st.ok?'（平均'+mins(st.avgWait)+'分）':''}${st.ab?' ・ 空振り'+st.ab:''}</div></div>`;}).join('')
     :`<div class="sub" style="padding:10px 0">${(D.spots||[]).length?'見つかりません':'まだ付け場がありません。「＋ 登録」から追加してください。'}</div>`;
+  drawSpotMap(list);
   if(spSort==='near'&&!lastFix)getPos().then(p=>p&&view==='spot'&&renderSpots());
 }
 function spotWaits(sp){const near=p=>p&&distM(p,sp)<=SPOT_R;return D.waits.filter(w=>w.spotId===sp.id||(!w.spotId&&near(w.waitPos)));}
