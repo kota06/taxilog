@@ -102,7 +102,7 @@ input,select,textarea{width:100%;font-size:16px;padding:10px;border:1px solid va
 .legend{display:flex;gap:12px;font-size:12px;color:var(--sub);margin-top:8px;flex-wrap:wrap}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:-1px}
 .leaflet-popup-content{font-size:13px}
-.spotpin div{font-size:18px;width:30px;height:30px;background:#fff;border:2px solid #f5a524;border-radius:50%;box-shadow:0 1px 4px #0008;display:flex;align-items:center;justify-content:center}
+.spotpin{background:none;border:0}.spotpin svg{display:block;filter:drop-shadow(0 1px 2px #0007)}
 .darkmap .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.85) contrast(.9)}
 .leaflet-control .btn{display:block;margin-bottom:6px}
 .leaflet-tooltip{font-weight:700;font-size:12px}
@@ -202,7 +202,6 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
 <section id="v-map" class="hide">
   <div class="card" style="padding:10px">
     <div class="sel chips" id="mKinds" style="margin-top:0"></div>
-    <div class="row" style="margin-top:8px"><span class="sub">地図</span><div class="sel chips" id="mStyle" style="margin-top:0"></div></div>
     <div class="row" style="margin-top:8px">
       <select id="mPeriod" style="flex:1"><option value="30">直近30日</option><option value="7">直近7日</option><option value="90">直近90日</option><option value="1">今日の出番</option><option value="date">日付を指定</option><option value="0">全期間</option></select>
       <select id="mDow" style="flex:1"><option value="all">全曜日</option><option value="0">日曜日</option><option value="1">月曜日</option><option value="2">火曜日</option><option value="3">水曜日</option><option value="4">木曜日</option><option value="5">金曜日</option><option value="6">土曜日</option></select>
@@ -787,13 +786,12 @@ async function initMap(){
   return true;
 }
 function applyMapStyle(){
-  const st=MAPSTYLES[D.settings.mapStyle]?D.settings.mapStyle:'std';
+  const st='osm';
   $('map').classList.toggle('dark',st==='dark');
   TILES=tilesFor(st);if(map)setTiles(0);
 }
 function renderMapCtl(){
-  const st=MAPSTYLES[D.settings.mapStyle]?D.settings.mapStyle:'std';
-  $('mStyle').innerHTML=Object.entries(MAPSTYLES).map(([k,[l]])=>`<button class="chip ${st===k?'on':''}" onclick="D.settings.mapStyle='${k}';save();applyMapStyle();renderMapCtl()">${l}</button>`).join('');
+  const st='osm';
   $('mKinds').innerHTML=[['call','🔴 鳴った場所'],['pick','🔵 乗車'],['drop','⚪ 降車'],['spot','📍 付け場']].map(([k,l])=>`<button class="chip ${mk[k]?'on':''}" onclick="mk['${k}']=!mk['${k}'];renderMapCtl();drawMap()">${l}</button>`).join('');
 }
 function drawMap(){
@@ -809,7 +807,7 @@ function drawMap(){
     if(mk.pick&&r.pickPos&&r.kind==='app'&&!mk.call)add(r.pickPos,C_CALL,`<b>${esc(r.service)} 乗車</b> ${hm(r.pickAt)}<br>${f}`,r.pickAt);
     if(mk.drop&&r.dropPos)add(r.dropPos,C_DROP,`<b>降車</b> ${hm(r.dropAt)}<br>${esc(areaName(r.dropArea,'t'))}<br>${f}`,r.dropAt);
   });
-  if(mk.spot)(D.spots||[]).forEach(sp=>{const st=spotStats(sp);L.marker([sp.lat,sp.lng],{icon:L.divIcon({className:'spotpin',html:`<div>${SPOT_ICON[sp.type]||'📍'}</div>`,iconSize:[30,30],iconAnchor:[15,28]})}).bindPopup(`<b>${esc(sp.name)}</b><br>乗車${st.picks}回・平均${st.picks?yen(st.avg):'-'}<br>待機${st.waits}回${st.ok?'・平均'+mins(st.avgWait)+'分':''}<br><a href="#" onclick="spotDetail('${sp.id}');return false">詳細を見る</a>`).addTo(layer);});
+  if(mk.spot)(D.spots||[]).forEach(sp=>{const st=spotStats(sp);L.marker([sp.lat,sp.lng],{icon:spotIcon()}).bindPopup(`<b>${esc(sp.name)}</b><br>乗車${st.picks}回・平均${st.picks?yen(st.avg):'-'}<br>待機${st.waits}回${st.ok?'・平均'+mins(st.avgWait)+'分':''}<br><a href="#" onclick="spotDetail('${sp.id}');return false">詳細を見る</a>`).addTo(layer);});
   lastPts=pts;
   if(mapFocus){map.setView(mapFocus,16);mapFocus=null;}
 }
@@ -914,6 +912,8 @@ $('wipe').onclick=()=>sheet(`<div class="ttl">全データを削除しますか�
 
 /* ============ spots (付け場) ============ */
 const SPOT_R=150;
+const PIN_SVG='<svg width="22" height="30" viewBox="0 0 22 30"><path d="M11 29C11 29 21 17.5 21 10.5A10 10 0 0 0 1 10.5C1 17.5 11 29 11 29Z" fill="#e8141c" stroke="#fff" stroke-width="2"/></svg>';
+const spotIcon=()=>L.divIcon({className:'spotpin',html:PIN_SVG,iconSize:[22,30],iconAnchor:[11,29],popupAnchor:[0,-26],tooltipAnchor:[0,-26]});
 const SPOT_TYPES=['付け待ち','駅','ホテル','病院','商業施設','乗り場','その他'];
 const SPOT_ICON={'付け待ち':'🅿️','駅':'🚉','ホテル':'🏨','病院':'🏥','商業施設':'🛍️','乗り場':'🚕','その他':'📍'};
 function distM(a,b){const R=6371000,toR=x=>x*Math.PI/180,dLa=toR(b.lat-a.lat),dLo=toR(b.lng-a.lng);const h=Math.sin(dLa/2)**2+Math.cos(toR(a.lat))*Math.cos(toR(b.lat))*Math.sin(dLo/2)**2;return 2*R*Math.asin(Math.sqrt(h));}
@@ -935,7 +935,7 @@ let spSort='near',spHour=new Date().getHours();
 let spListMap=null,spListLayer=null;
 async function drawSpotMap(list){
   const ok=await loadLeaflet();if(!ok||view!=='spot')return;
-  const st=MAPSTYLES[D.settings.mapStyle]?D.settings.mapStyle:'std';
+  const st='osm';
   if(!spListMap){
     const c=lastFix?[lastFix.lat,lastFix.lng]:(D.spots&&D.spots[0]?[D.spots[0].lat,D.spots[0].lng]:[35.676,139.763]);
     spListMap=L.map('spMapBox',{zoomControl:true,attributionControl:false}).setView(c,14);
@@ -948,7 +948,7 @@ async function drawSpotMap(list){
   setTimeout(()=>spListMap.invalidateSize(),60);
   spListLayer.clearLayers();
   if(lastFix)L.circleMarker([lastFix.lat,lastFix.lng],{radius:7,color:'#fff',weight:2,fillColor:'#2563eb',fillOpacity:1}).addTo(spListLayer);
-  list.forEach(({s,st})=>{L.marker([s.lat,s.lng],{icon:L.divIcon({className:'spotpin',html:`<div>${SPOT_ICON[s.type]||'📍'}</div>`,iconSize:[30,30],iconAnchor:[15,15]})}).bindTooltip(esc(s.name),{direction:'top',offset:[0,-14]}).on('click',()=>spotDetail(s.id)).addTo(spListLayer);});
+  list.forEach(({s,st})=>{L.marker([s.lat,s.lng],{icon:spotIcon()}).bindTooltip(esc(s.name),{direction:'top'}).on('click',()=>spotDetail(s.id)).addTo(spListLayer);});
 }
 function renderSpots(){
   const q=($('spQ').value||'').trim();
@@ -1034,7 +1034,7 @@ async function spotEdit(id){
   const ok=await loadLeaflet();
   if(!ok){$('spMsg').textContent='地図を読み込めないため、現在地で登録します';return;}
   spMap=L.map('spMap',{zoomControl:true,attributionControl:false}).setView(start?[start.lat,start.lng]:[35.681,139.767],17);
-  const st=MAPSTYLES[D.settings.mapStyle]?D.settings.mapStyle:'std';
+  const st='osm';
   L.tileLayer(MAPSTYLES[st][1],{maxZoom:MAPSTYLES[st][2]||18}).addTo(spMap);
   if(st==='dark')$('spMap').classList.add('darkmap');
   if(!s&&!lastFix)getPos().then(p=>p&&spMap&&spMap.setView([p.lat,p.lng],17));
