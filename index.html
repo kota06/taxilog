@@ -188,7 +188,11 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
     <div class="sel chips" id="mKinds" style="margin-top:0"></div>
     <div class="row" style="margin-top:8px"><span class="sub">地図</span><div class="sel chips" id="mStyle" style="margin-top:0"></div></div>
     <div class="row" style="margin-top:8px">
-      <select id="mPeriod" style="flex:1"><option value="30">直近30日</option><option value="7">直近7日</option><option value="1">今日の出番</option><option value="0">全期間</option></select>
+      <select id="mPeriod" style="flex:1"><option value="30">直近30日</option><option value="7">直近7日</option><option value="90">直近90日</option><option value="1">今日の出番</option><option value="date">日付を指定</option><option value="0">全期間</option></select>
+      <select id="mDow" style="flex:1"><option value="all">全曜日</option><option value="0">日曜日</option><option value="1">月曜日</option><option value="2">火曜日</option><option value="3">水曜日</option><option value="4">木曜日</option><option value="5">金曜日</option><option value="6">土曜日</option></select>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <input type="date" id="mDate" class="hide" style="flex:1">
       <select id="mHourSel" style="flex:1"></select>
     </div>
   </div>
@@ -200,18 +204,35 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
 <!-- ================= ANALYSIS ================= -->
 <section id="v-ana" class="hide">
   <div class="card">
+    <div class="ttl">絞り込み</div>
+    <div class="row">
+      <div style="flex:1"><label>期間</label><select id="aPeriod"><option value="30">直近30日</option><option value="7">直近7日</option><option value="90">直近90日</option><option value="1">今日の出番</option><option value="date">日付を指定</option><option value="0">全期間</option></select></div>
+      <div style="flex:1"><label>曜日</label><select id="aDow"><option value="all">全曜日</option><option value="0">日曜日</option><option value="1">月曜日</option><option value="2">火曜日</option><option value="3">水曜日</option><option value="4">木曜日</option><option value="5">金曜日</option><option value="6">土曜日</option></select></div>
+    </div>
+    <input type="date" id="aDate" class="hide" style="margin-top:8px">
+    <div class="sub" style="margin-top:6px">曜日・日付は出庫した日で判定します（明け番の深夜分も出庫日に含めます）</div>
+  </div>
+  <div class="card">
     <div class="ttl">時間帯 × エリア</div>
     <label>対象</label>
     <div class="sel chips" id="aAxis" style="margin-top:0"></div>
     <div class="row">
       <div style="flex:1"><label>集計</label><select id="aMetric"><option value="cnt">件数</option><option value="sum">売上合計</option><option value="avg">平均単価</option></select></div>
-      <div style="flex:1"><label>期間</label><select id="aPeriod"><option value="30">直近30日</option><option value="90">直近90日</option><option value="0">全期間</option></select></div>
     </div>
     <div class="row">
       <div style="flex:1"><label>エリア単位</label><select id="aGran"><option value="t">町名</option><option value="w">区・市</option></select></div>
       <div style="flex:1"><label>時間の区切り</label><select id="aStep"><option value="1">1時間</option><option value="2">2時間</option><option value="3">3時間</option></select></div>
     </div>
     <div class="heat" id="aHeat" style="margin-top:12px"></div>
+  </div>
+  <div class="card">
+    <div class="ttl">曜日別の成績</div>
+    <div class="sub" style="margin-top:4px">選んだ期間の出番を曜日ごとに平均（曜日の絞り込みは無視）</div>
+    <div id="aDowT" style="margin-top:8px"></div>
+  </div>
+  <div class="card">
+    <div class="ttl">日付別の成績</div>
+    <div id="aDayT" style="margin-top:8px"></div>
   </div>
   <div class="card">
     <div class="ttl">エリアランキング</div>
@@ -243,7 +264,6 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
     <label>1出番の予定拘束時間（時間・目標ペース線用）</label><input id="sShiftH" type="number" inputmode="decimal" placeholder="20">
     <label>迎車料金（標準・円）</label><input id="sFee" type="number" inputmode="numeric" placeholder="500">
     <label>アプリ配車のボタン（カンマ区切り）</label><input id="sSvc" placeholder="GO,S.RIDE,Uber,DiDi,無線">
-    <label>支払い方法（カンマ区切り）</label><input id="sPays" placeholder="現金,カード,QR,アプリ決済,チケット">
     <label><input type="checkbox" id="sWake" style="width:auto;vertical-align:middle"> 出庫中は画面を消さない</label>
     <button class="btn g full" style="margin-top:12px" id="sSave">保存</button>
   </div>
@@ -411,7 +431,6 @@ function drawFare(isNew){
   <div class="fareIn" style="margin-top:10px;background:var(--card2);border-radius:12px">¥${fareBuf?(+fareBuf).toLocaleString():'0'}</div>
   <div class="keys">${[1,2,3,4,5,6,7,8,9,'00',0,'⌫'].map(k=>`<button onclick="fk('${k}')">${k}</button>`).join('')}</div>
   ${r.kind==='app'?`<div class="row" style="margin-top:10px"><span class="sub" style="white-space:nowrap">うち迎車料金 ¥</span><input type="number" inputmode="numeric" value="${fareFee}" oninput="fareFee=+this.value||0" style="padding:8px"></div>`:''}
-  <label>支払い</label><div class="sel chips" style="margin-top:0">${payList().map(p=>`<button class="chip ${p===farePay?'on':''}" onclick="farePay='${esc(p)}';drawFare(${isNew})">${esc(p)}</button>`).join('')}</div>
   ${isNew?'':`<label>種類</label><div class="sel chips" style="margin-top:0">${kinds.map(([k,l])=>`<button class="chip ${r.kind===k?'on':''}" onclick="fareRide.kind='${k}';drawFare(false)">${l}</button>`).join('')}</div>
   ${r.kind==='app'?`<div class="sel chips">${svcList().map(s=>`<button class="chip ${r.service===s?'on':''}" onclick="fareRide.service='${esc(s)}';drawFare(false)">${esc(s)}</button>`).join('')}</div>`:''}`}
   <button class="btn g full" style="margin-top:14px;font-size:18px" onclick="saveFare()">保存</button>
@@ -549,7 +568,7 @@ function logCard(r){
   const to=r.dropArea||r.dropPos?aName(r.dropArea,r.dropPos):'';
   const fare=r.cancelled?'<span class="sub">-</span>':r.dropAt?(r.fare?yen(r.fare):'<span style="color:var(--red);font-size:13px">未入力</span>'):'<span class="sub">実車中</span>';
   const pm=r.callAt&&r.pickAt?'迎車'+mins(r.pickAt-r.callAt)+'分':'';
-  const sub=[r.pickupFee?'迎車料金 '+yen(r.pickupFee):'',pm,r.pay||''].filter(Boolean).join(' ・ ');
+  const sub=[r.pickupFee?'迎車料金 '+yen(r.pickupFee):'',pm].filter(Boolean).join(' ・ ');
   return `<div class="logc" onclick="editRide('${r.id}')"><div class="lt"><span class="tm">${hm(r.pickAt||r.callAt)}</span>${tag}${r.kind==='app'?`<span class="tag" style="background:#2a3140;color:#cfd6e4">${esc(r.service||'アプリ')}</span>`:''}<span class="fr">${fare}</span></div><div class="rt">${esc(from)}${to?' → '+esc(to):''}</div>${sub?`<div class="sub">${esc(sub)}</div>`:''}</div>`;
 }
 function renderDay(){
@@ -674,7 +693,6 @@ function drawLogAdd(){
   <div class="row"><div style="flex:1"><label>料金（総額）</label><input type="number" inputmode="numeric" id="laF" value="${la.fare||''}"></div><div style="flex:1"><label>乗車時間（分）</label><input type="number" inputmode="numeric" id="laM" value="${la.min||15}"></div></div>
   ${la.kind==='app'?`<div class="row"><div style="flex:1"><label>迎車料金</label><input type="number" inputmode="numeric" id="laP" value="${la.fee??D.settings.pickFee??0}"></div><div style="flex:1"><label>迎車時間（分）</label><input type="number" inputmode="numeric" id="laW" value="${la.wm||5}"></div></div>`:''}
   <div class="row"><div style="flex:1"><label>乗車場所</label><input id="laA" placeholder="例 中央区銀座" value="${esc(la.a||'')}"></div><div style="flex:1"><label>降車場所</label><input id="laB" placeholder="例 港区芝" value="${esc(la.b||'')}"></div></div>
-  <label>支払い</label><div class="sel chips" style="margin-top:0">${payList().map(v=>`<button class="chip ${la.pay===v?'on':''}" onclick="laSync();la.pay='${esc(v)}';drawLogAdd()">${esc(v)}</button>`).join('')}</div>
   <div class="grid2" style="margin-top:14px"><button class="btn" onclick="closeSheet()">キャンセル</button><button class="btn g" onclick="laSave()">追加</button></div>`);
 }
 function laSync(){la.t=fromIn($('laT').value)||la.t;la.fare=$('laF').value;la.min=$('laM').value;la.a=$('laA').value;la.b=$('laB').value;if($('laP')){la.fee=+$('laP').value||0;la.wm=$('laW').value;}}
@@ -692,6 +710,15 @@ $('rPrev').onclick=()=>{rView=new Date(rView.getFullYear(),rView.getMonth()-1,1)
 $('rNext').onclick=()=>{rView=new Date(rView.getFullYear(),rView.getMonth()+1,1);renderReport();};
 
 /* ============ map ============ */
+function makeFilter(per,date,dow){
+  const sb=Object.fromEntries(D.shifts.map(s=>[s.id,s])),cur=curShift()||D.shifts[D.shifts.length-1];
+  return (sid,t)=>{const s=sb[sid],st=s?s.start:t;
+    if(per==='date'){if(!date||dkey(st)!==date)return false;}
+    else if(per==='1'){if(!cur||sid!==cur.id)return false;}
+    else if(+per&&t<now()-(+per)*86400000)return false;
+    if(dow!=='all'&&new Date(st).getDay()!==+dow)return false;
+    return true;};
+}
 const C_CALL='#ff2d2d',C_NAGASHI='#2563eb',C_WAIT='#16a34a',C_DROP='#6b7280';
 let map=null,layer=null;const mk={call:true,pick:true,drop:false};
 function inPeriod(t,days){if(!days)return true;if(days==1){const s=curShift()||D.shifts[D.shifts.length-1];return s&&t>=s.start&&(!s.end||t<=s.end);}return t>=now()-days*86400000;}
@@ -750,10 +777,11 @@ function renderMapCtl(){
 }
 function drawMap(){
   if(!map)return;layer.clearLayers();
-  const days=+$('mPeriod').value,hs=$('mHourSel').value;const pts=[];
+  const hs=$('mHourSel').value;const pts=[];const F=makeFilter($('mPeriod').value,$('mDate').value,$('mDow').value);$('mDate').classList.toggle('hide',$('mPeriod').value!=='date');
   const hOK=t=>{if(hs==='all')return true;const [a,b]=hs.split('-').map(Number);const h=new Date(t).getHours();return h>=a&&h<b;};
-  const add=(p,color,html,t,hollow)=>{if(!p||!inPeriod(t,days)||!hOK(t))return;pts.push([p.lat,p.lng]);L.circleMarker([p.lat,p.lng],{radius:8,color:hollow?color:'#fff',weight:hollow?3:2,fillColor:color,fillOpacity:hollow?.15:.95}).bindPopup(html).addTo(layer);};
+  const add=(p,color,html,t,hollow)=>{if(!p||!hOK(t))return;pts.push([p.lat,p.lng]);L.circleMarker([p.lat,p.lng],{radius:8,color:hollow?color:'#fff',weight:hollow?3:2,fillColor:color,fillOpacity:hollow?.15:.95}).bindPopup(html).addTo(layer);};
   D.rides.forEach(r=>{
+    if(!F(r.shiftId,r.pickAt||r.callAt))return;
     const f=r.fare?yen(r.fare):'';
     if(mk.call&&r.kind==='app'&&r.callPos)add(r.callPos,C_CALL,`<b>${esc(r.service)} 受信</b> ${hm(r.callAt)}<br>${esc(areaName(r.callArea,'t'))}${r.cancelled?'<br>キャンセル':'<br>'+f}`,r.callAt,r.cancelled);
     if(mk.pick&&r.pickPos&&r.kind!=='app')add(r.pickPos,r.kind==='wait'?C_WAIT:C_NAGASHI,`<b>${r.kind==='wait'?'待機':'流し'}乗車</b> ${hm(r.pickAt)}<br>${esc(areaName(r.pickArea,'t'))}<br>${f}${r.waitMs?'<br>待機 '+dur(r.waitMs):''}`,r.pickAt);
@@ -763,21 +791,31 @@ function drawMap(){
   if(pts.length)map.fitBounds(pts,{padding:[30,30],maxZoom:15});
 }
 (function(){const o=['<option value="all">全時間帯</option>'];for(let h=0;h<24;h++)o.push(`<option value="${h}-${h+1}">${h}時台</option>`);$('mHourSel').innerHTML=o.join('');})();
-$('mPeriod').onchange=drawMap;$('mHourSel').onchange=drawMap;
+['mPeriod','mDow','mDate','mHourSel'].forEach(id=>$(id).onchange=()=>{if(id==='mPeriod'&&$('mPeriod').value==='date'&&!$('mDate').value)$('mDate').value=dkey(now());drawMap();});
 
 /* ============ analysis ============ */
 let aAxis='pick';
 function renderAna(){
   $('aAxis').innerHTML=[['pick','乗車地点'],['call','アプリ受信地点'],['drop','降車地点']].map(([k,l])=>`<button class="chip ${aAxis===k?'on':''}" onclick="aAxis='${k}';renderAna()">${l}</button>`).join('');
-  const days=+$('aPeriod').value,g=$('aGran').value,step=+$('aStep').value,metric=$('aMetric').value;
-  const since=days?now()-days*86400000:0;
+  const g=$('aGran').value,step=+$('aStep').value,metric=$('aMetric').value,per=$('aPeriod').value;
+  $('aDate').classList.toggle('hide',per!=='date');if(per==='date'&&!$('aDate').value)$('aDate').value=dkey(now());
+  const F=makeFilter(per,$('aDate').value,$('aDow').value),F2=makeFilter(per,$('aDate').value,'all');
+  const RS=D.rides.filter(r=>F(r.shiftId,r.pickAt||r.callAt));
   // records for axis
   let recs=[];
-  D.rides.forEach(r=>{
-    if(aAxis==='call'){if(r.kind==='app'&&r.callAt>=since)recs.push({t:r.callAt,a:r.callArea,fare:r.cancelled?0:(r.fare||0),ok:!r.cancelled});}
-    else if(aAxis==='pick'){if(done(r)&&r.pickAt>=since)recs.push({t:r.pickAt,a:r.pickArea,fare:r.fare||0,ok:true});}
-    else{if(done(r)&&r.dropAt>=since)recs.push({t:r.dropAt,a:r.dropArea,fare:r.fare||0,ok:true});}
+  RS.forEach(r=>{
+    if(aAxis==='call'){if(r.kind==='app'&&r.callAt)recs.push({t:r.callAt,a:r.callArea,fare:r.cancelled?0:(r.fare||0),ok:!r.cancelled});}
+    else if(aAxis==='pick'){if(done(r))recs.push({t:r.pickAt,a:r.pickArea,fare:r.fare||0,ok:true});}
+    else{if(done(r))recs.push({t:r.dropAt,a:r.dropArea,fare:r.fare||0,ok:true});}
   });
+  // weekday / date tables (by shift)
+  const shs=D.shifts.filter(s=>F2(s.id,s.start)),agg={},byDay={};
+  shs.forEach(s=>{const x=shiftStats(s),k=new Date(s.start).getDay(),o=agg[k]=agg[k]||{n:0,f:0,c:0,w:0};o.n++;o.f+=x.fare;o.c+=x.cnt;o.w+=x.bind-x.brk;
+    const dk=dkey(s.start),q=byDay[dk]=byDay[dk]||{f:0,c:0,w:0};q.f+=x.fare;q.c+=x.cnt;q.w+=x.bind-x.brk;});
+  const W='日月火水木金土';
+  $('aDowT').innerHTML=shs.length?`<table class="rank"><tr><th>曜日</th><th>出番</th><th>平均営収</th><th>平均回数</th><th>時間営収</th></tr>${[1,2,3,4,5,6,0].filter(k=>agg[k]).map(k=>{const o=agg[k];return `<tr><td style="color:${k==0?'#ff8a8a':k==6?'#8fb2ff':'inherit'}">${W[k]}</td><td>${o.n}</td><td>${yen(o.f/o.n)}</td><td>${(o.c/o.n).toFixed(1)}</td><td>${o.w?yen(o.f/(o.w/3600000)):'-'}</td></tr>`;}).join('')}</table>`:'<div class="sub">データなし</div>';
+  const dks=Object.keys(byDay).sort().reverse();
+  $('aDayT').innerHTML=dks.length?`<table class="rank"><tr><th>日付</th><th>営収</th><th>回数</th><th>時間営収</th></tr>${dks.slice(0,40).map(k=>{const q=byDay[k],[,m,d]=k.split('-').map(Number),wd=new Date(k+'T00:00').getDay();return `<tr onclick="rView=new Date(${k.slice(0,4)},${m-1},1);rSel='${k}';go('report')"><td>${m}/${d}<span style="color:${wd==0?'#ff8a8a':wd==6?'#8fb2ff':'var(--sub)'}">（${W[wd]}）</span></td><td>${yen(q.f)}</td><td>${q.c}</td><td>${q.w?yen(q.f/(q.w/3600000)):'-'}</td></tr>`;}).join('')}</table><div class="sub" style="margin-top:6px">行をタップするとその日の日報を開きます</div>`:'<div class="sub">データなし</div>';
   const nb=24/step;const cell={},tot={};
   recs.forEach(x=>{const an=areaName(x.a,g);const b=Math.floor(new Date(x.t).getHours()/step);
     (cell[an]=cell[an]||Array.from({length:nb},()=>({c:0,s:0,n:0})))[b].c++;cell[an][b].s+=x.fare;if(x.ok&&x.fare)cell[an][b].n++;
@@ -791,31 +829,31 @@ function renderAna(){
   const rk=Object.keys(tot).sort((a,b)=>tot[b].s-tot[a].s||tot[b].c-tot[a].c).slice(0,12);
   $('aRank').innerHTML=rk.length?`<table class="rank"><tr><th>エリア</th><th>件数</th><th>売上</th><th>平均</th></tr>${rk.map(a=>`<tr><td>${esc(a)}</td><td>${tot[a].c}</td><td>${yen(tot[a].s)}</td><td>${tot[a].n?yen(tot[a].s/tot[a].n):'-'}</td></tr>`).join('')}</table>`:'<div class="sub">データなし</div>';
   // waits
-  const wa={};D.waits.filter(w=>w.end&&w.start>=since).forEach(w=>{const an=areaName(w.waitArea,g);const o=wa[an]=wa[an]||{n:0,ms:0,ride:0,app:0,ab:0};o.n++;if(w.outcome==='ride'){o.ride++;o.ms+=w.end-w.start;}else if(w.outcome==='app')o.app++;else o.ab++;});
+  const wa={};D.waits.filter(w=>w.end&&F(w.shiftId,w.start)).forEach(w=>{const an=areaName(w.waitArea,g);const o=wa[an]=wa[an]||{n:0,ms:0,ride:0,app:0,ab:0};o.n++;if(w.outcome==='ride'){o.ride++;o.ms+=w.end-w.start;}else if(w.outcome==='app')o.app++;else o.ab++;});
   const wk=Object.keys(wa).sort((a,b)=>wa[b].n-wa[a].n).slice(0,12);
   $('aWait').innerHTML=wk.length?`<table class="rank"><tr><th>エリア</th><th>待機</th><th>乗車</th><th>平均待ち</th><th>空振り</th></tr>${wk.map(a=>{const o=wa[a];return `<tr><td>${esc(a)}</td><td>${o.n}</td><td>${o.ride}</td><td>${o.ride?dur(o.ms/o.ride):'-'}</td><td>${o.ab}</td></tr>`;}).join('')}</table>`:'<div class="sub">待機の記録がまだありません</div>';
   // hourly bars (pickups)
-  const hb=Array(24).fill(0);D.rides.filter(r=>done(r)&&r.pickAt>=since).forEach(r=>hb[new Date(r.pickAt).getHours()]+=r.fare||0);
+  const hb=Array(24).fill(0);RS.filter(done).forEach(r=>hb[new Date(r.pickAt).getHours()]+=r.fare||0);
   const hm2=Math.max(1,...hb);
   $('aBars').innerHTML=hb.map(v=>`<div style="height:${v/hm2*100}%" title="${yen(v)}"></div>`).join('');
   $('aBx').innerHTML=hb.map((_,i)=>`<span>${i%3===0?i:''}</span>`).join('');
   // service
-  const sv={};D.rides.filter(r=>(r.pickAt||r.callAt)>=since).forEach(r=>{const k=r.kind==='app'?(r.service||'アプリ'):r.kind==='wait'?'待機':'流し';const o=sv[k]=sv[k]||{c:0,cx:0,s:0,n:0};o.c++;if(r.cancelled)o.cx++;if(done(r)){o.s+=r.fare||0;if(r.fare)o.n++;}});
+  const sv={};RS.forEach(r=>{const k=r.kind==='app'?(r.service||'アプリ'):r.kind==='wait'?'待機':'流し';const o=sv[k]=sv[k]||{c:0,cx:0,s:0,n:0};o.c++;if(r.cancelled)o.cx++;if(done(r)){o.s+=r.fare||0;if(r.fare)o.n++;}});
   const sk=Object.keys(sv).sort((a,b)=>sv[b].s-sv[a].s);
   $('aSvc').innerHTML=sk.length?`<table class="rank"><tr><th>種類</th><th>件数</th><th>取消</th><th>売上</th><th>平均</th></tr>${sk.map(k=>{const o=sv[k];return `<tr><td>${esc(k)}</td><td>${o.c}</td><td>${o.cx||'-'}</td><td>${yen(o.s)}</td><td>${o.n?yen(o.s/o.n):'-'}</td></tr>`;}).join('')}</table>`:'<div class="sub">データなし</div>';
 }
-['aMetric','aPeriod','aGran','aStep'].forEach(id=>$(id).onchange=renderAna);
+['aMetric','aPeriod','aGran','aStep','aDow','aDate'].forEach(id=>$(id).onchange=renderAna);
 
 /* ============ settings ============ */
-function fillSet(){const s=D.settings;$('sGoal').value=s.goal||'';$('sPlan').value=s.plan||'';$('sRate').value=s.rate||'';$('sSvc').value=s.svc;$('sPays').value=s.pays;$('sWake').checked=!!s.wake;$('sDayGoal').value=s.dayGoal||'';$('sShiftH').value=s.shiftH||'';$('sFee').value=s.pickFee??'';}
-$('sSave').onclick=()=>{Object.assign(D.settings,{goal:+$('sGoal').value||0,plan:+$('sPlan').value||0,rate:+$('sRate').value||0,svc:$('sSvc').value||'GO',pays:$('sPays').value||'現金',wake:$('sWake').checked,dayGoal:+$('sDayGoal').value||0,shiftH:+$('sShiftH').value||20,pickFee:+$('sFee').value||0});save();lastActMode=null;toast('保存しました');};
+function fillSet(){const s=D.settings;$('sGoal').value=s.goal||'';$('sPlan').value=s.plan||'';$('sRate').value=s.rate||'';$('sSvc').value=s.svc;$('sWake').checked=!!s.wake;$('sDayGoal').value=s.dayGoal||'';$('sShiftH').value=s.shiftH||'';$('sFee').value=s.pickFee??'';}
+$('sSave').onclick=()=>{Object.assign(D.settings,{goal:+$('sGoal').value||0,plan:+$('sPlan').value||0,rate:+$('sRate').value||0,svc:$('sSvc').value||'GO',wake:$('sWake').checked,dayGoal:+$('sDayGoal').value||0,shiftH:+$('sShiftH').value||20,pickFee:+$('sFee').value||0});save();lastActMode=null;toast('保存しました');};
 function download(name,text,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500);}
 const stamp=()=>{const d=new Date();return d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate());};
 $('exJson').onclick=()=>download('taxilog-'+stamp()+'.json',JSON.stringify(D),'application/json');
 $('exCsv').onclick=()=>{
   const f=t=>t?new Date(t).toLocaleString('ja-JP'):'';const q=s=>'"'+String(s??'').replace(/"/g,'""')+'"';
-  const rows=[['種類','アプリ','受信時刻','受信エリア','乗車時刻','乗車エリア','降車時刻','降車エリア','料金','支払い','待機分','キャンセル','乗車緯度','乗車経度','受信緯度','受信経度'].join(',')];
-  D.rides.forEach(r=>rows.push([r.kind==='app'?'アプリ':r.kind==='wait'?'待機':'流し',r.service,f(r.callAt),areaName(r.callArea,'t'),f(r.pickAt),areaName(r.pickArea,'t'),f(r.dropAt),areaName(r.dropArea,'t'),r.fare||'',r.pay||'',r.waitMs?Math.round(r.waitMs/60000):'',r.cancelled?'1':'',r.pickPos?.lat??'',r.pickPos?.lng??'',r.callPos?.lat??'',r.callPos?.lng??''].map(q).join(',')));
+  const rows=[['種類','アプリ','受信時刻','受信エリア','乗車時刻','乗車エリア','降車時刻','降車エリア','料金','待機分','キャンセル','乗車緯度','乗車経度','受信緯度','受信経度'].join(',')];
+  D.rides.forEach(r=>rows.push([r.kind==='app'?'アプリ':r.kind==='wait'?'待機':'流し',r.service,f(r.callAt),areaName(r.callArea,'t'),f(r.pickAt),areaName(r.pickArea,'t'),f(r.dropAt),areaName(r.dropArea,'t'),r.fare||'',r.waitMs?Math.round(r.waitMs/60000):'',r.cancelled?'1':'',r.pickPos?.lat??'',r.pickPos?.lng??'',r.callPos?.lat??'',r.callPos?.lng??''].map(q).join(',')));
   download('taxilog-'+stamp()+'.csv','﻿'+rows.join('\n'),'text/csv');
 };
 $('imFile').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const j=JSON.parse(await f.text());if(!j.rides||!j.shifts)throw 0;
