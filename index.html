@@ -436,8 +436,9 @@ function endBreak(silent){const s=curShift();const b=s&&s.breaks[s.breaks.length
 
 /* ============ fare sheet ============ */
 let fareBuf='',farePay='',fareRide=null,fareFee=0;
+let fareEd={};
 function fareSheet(r,isNew){
-  fareRide=r;fareBuf=r.fare?String(r.fare):'';fareFee=r.pickupFee??(r.kind==='app'?(+D.settings.pickFee||0):0);farePay=r.pay||(r.kind==='app'?'アプリ決済':'現金');
+  fareEd={};fareRide=r;fareBuf=r.fare?String(r.fare):'';fareFee=r.pickupFee??(r.kind==='app'?(+D.settings.pickFee||0):0);farePay=r.pay||(r.kind==='app'?'アプリ決済':'現金');
   if(!payList().includes(farePay))farePay=payList()[0]||'';
   drawFare(isNew);
 }
@@ -449,12 +450,48 @@ function drawFare(isNew){
   <div class="keys">${[1,2,3,4,5,6,7,8,9,'00',0,'⌫'].map(k=>`<button onclick="fk('${k}')">${k}</button>`).join('')}</div>
   ${r.kind==='app'?`<div class="row" style="margin-top:10px"><span class="sub" style="white-space:nowrap">うち迎車料金 ¥</span><input type="number" inputmode="numeric" value="${fareFee}" oninput="fareFee=+this.value||0" style="padding:8px"></div>`:''}
   ${isNew?'':`<label>種類</label><div class="sel chips" style="margin-top:0">${kinds.map(([k,l])=>`<button class="chip ${r.kind===k?'on':''}" onclick="fareRide.kind='${k}';drawFare(false)">${l}</button>`).join('')}</div>
-  ${r.kind==='app'?`<div class="sel chips">${svcList().map(s=>`<button class="chip ${r.service===s?'on':''}" onclick="fareRide.service='${esc(s)}';drawFare(false)">${esc(s)}</button>`).join('')}</div>`:''}`}
+  ${r.kind==='app'?`<div class="sel chips">${svcList().map(s=>`<button class="chip ${r.service===s?'on':''}" onclick="fareRide.service='${esc(s)}';drawFare(false)">${esc(s)}</button>`).join('')}</div>`:''}
+  <label>時刻と場所</label>${pointRows(r)}`}
   <button class="btn g full" style="margin-top:14px;font-size:18px" onclick="saveFare()">保存</button>
   <div class="grid2" style="margin-top:8px">${isNew?'<button class="btn" onclick="closeSheet()">あとで入力</button><span></span>':'<button class="btn" onclick="closeSheet()">閉じる</button><button class="btn r" onclick="delRide()">削除</button>'}</div>`);
 }
+const PTS=[['call','📶 アプリ受信'],['pick','🚕 乗車'],['drop','🏁 降車']];
+const fv=(r,k)=>k in fareEd?fareEd[k]:r[k];
+function pointRows(r){
+  return PTS.filter(([k])=>k!=='call'||r.kind==='app').map(([k,l])=>{
+    const t=fv(r,k+'At'),pos=fv(r,k+'Pos'),moved=(k+'Pos') in fareEd;
+    const place=moved?'地図で指定した場所（保存後に町名を取得）':pos?aName(r[k+'Area'],pos):(r[k+'Area']?areaName(r[k+'Area'],'t'):'場所なし');
+    return `<div style="background:var(--card2);border-radius:12px;padding:10px;margin-bottom:8px">
+      <div class="row"><b style="font-size:14px;white-space:nowrap">${l}</b><input type="datetime-local" value="${t?toIn(t):''}" onchange="fareEd['${k}At']=fromIn(this.value)" style="padding:6px 8px;font-size:14px"></div>
+      <div class="row" style="margin-top:6px"><span class="sub" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${moved?'color:var(--yellow)':''}">📍 ${esc(place)}</span><button class="btn sm" onclick="pickPoint('${k}')">地図で直す</button></div></div>`;}).join('');
+}
+let ppMap=null,ppKey=null;
+async function pickPoint(k){
+  ppKey=k;const r=fareRide,pos=fv(r,k+'Pos')||(k==='call'?fv(r,'pickPos'):null)||(k==='pick'?fv(r,'callPos'):null)||lastFix;
+  const lbl=PTS.find(x=>x[0]===k)[1];
+  sheet(`<div class="ttl">${lbl}の場所を直す</div><div class="sub" style="margin-top:4px">地図を動かして、赤い＋を正しい場所に合わせてください</div>
+  <div style="position:relative;margin-top:10px"><div id="ppMap" style="height:340px;border-radius:12px;overflow:hidden;background:#0d1015"></div><div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:32px;color:#e8141c;pointer-events:none;z-index:500;text-shadow:0 0 3px #fff,0 0 3px #fff">＋</div></div>
+  <button class="btn sm" style="margin-top:8px" onclick="getPos().then(p=>p&&ppMap&&ppMap.setView([p.lat,p.lng],17))">📍 現在地に移動</button> <span class="sub" id="ppMsg"></span>
+  <div class="grid2" style="margin-top:12px"><button class="btn" onclick="ppClose(false)">戻る</button><button class="btn g" onclick="ppClose(true)">この場所にする</button></div>`);
+  if(ppMap){ppMap.remove();ppMap=null;}
+  const ok=await loadLeaflet();if(!ok){$('ppMsg').textContent='地図を読み込めません（電波を確認）';return;}
+  ppMap=L.map('ppMap',{zoomControl:true,attributionControl:false}).setView(pos?[pos.lat,pos.lng]:[35.676,139.763],pos?17:14);
+  L.tileLayer(MAPSTYLES.osm[1],{maxZoom:19}).addTo(ppMap);
+  PTS.forEach(([k2])=>{const p2=fv(r,k2+'Pos');if(p2&&k2!==k)L.circleMarker([p2.lat,p2.lng],{radius:6,color:'#fff',weight:2,fillColor:k2==='call'?C_CALL:k2==='pick'?C_NAGASHI:C_DROP,fillOpacity:.9}).addTo(ppMap);});
+  setTimeout(()=>ppMap&&ppMap.invalidateSize(),150);
+}
+function ppClose(ok){
+  if(ok&&ppMap){const c=ppMap.getCenter();fareEd[ppKey+'Pos']={lat:+c.lat.toFixed(6),lng:+c.lng.toFixed(6),acc:0,t:now(),manual:true};}
+  if(ppMap){ppMap.remove();ppMap=null;}
+  drawFare(false);
+}
 function fk(k){if(k==='⌫')fareBuf=fareBuf.slice(0,-1);else if(fareBuf.length<7)fareBuf=(fareBuf+k).replace(/^0+/,'');drawFare(!fareRide._edit);}
-function saveFare(){fareRide.fare=+fareBuf||0;fareRide.pay=farePay;fareRide.pickupFee=fareRide.kind==='app'?fareFee:0;delete fareRide._edit;save();closeSheet();renderAll();toast(fareRide.fare?yen(fareRide.fare)+' を記録':'保存しました');}
+function saveFare(){
+  const r=fareRide,c=fv(r,'callAt'),pk=fv(r,'pickAt'),dr=fv(r,'dropAt');
+  if((c&&pk&&c>pk)||(pk&&dr&&pk>dr)){toast('時刻の順番がおかしいです（受信→乗車→降車）');return;}
+  const moved=[];Object.entries(fareEd).forEach(([k,v])=>{if(v==null)return;r[k]=v;if(k.endsWith('Pos')){const b=k.slice(0,-3);delete r[b+'Area'];moved.push(b);}});
+  fareEd={};moved.forEach(b=>queueGeo(r,b));
+  fareRide.fare=+fareBuf||0;fareRide.pay=farePay;fareRide.pickupFee=fareRide.kind==='app'?fareFee:0;delete fareRide._edit;save();closeSheet();renderAll();toast(fareRide.fare?yen(fareRide.fare)+' を記録':'保存しました');}
 function editRide(id){const r=D.rides.find(x=>x.id===id);if(!r)return;r._edit=true;fareSheet(r,false);}
 function delRide(){const r=fareRide;sheet(`<div class="ttl">この乗車を削除しますか？</div><div class="grid2" style="margin-top:14px"><button class="btn" onclick="editRide('${r.id}')">戻る</button><button class="btn r" onclick="D.rides=D.rides.filter(x=>x.id!=='${r.id}');save();closeSheet();renderAll();">削除</button></div>`);}
 
