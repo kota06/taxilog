@@ -194,6 +194,7 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
     <div id="spHourWrap" class="hide" style="margin-top:8px"><select id="spHour"></select></div>
   </div>
   <div id="spMapBox" style="height:300px;border-radius:14px;overflow:hidden;background:#0d1015;margin-bottom:12px;position:relative;z-index:0"></div>
+  <div class="grid2" style="margin-bottom:12px"><button class="btn" onclick="exportSpots()">📤 付け場を渡す</button><label class="btn" style="margin:0;text-align:center;color:var(--ink);font-size:15px">📥 付け場を読み込む<input type="file" accept=".json,application/json" style="display:none" onchange="importFile(this)"></label></div>
   <div class="card"><div class="ttl">付け場</div><div class="sub" style="margin:4px 0 10px">待機開始すると、近く（150m以内）の付け場に自動でひも付きます</div><div id="spList"></div></div>
 </section>
 
@@ -289,7 +290,8 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
       <button class="btn" id="exJson">バックアップ保存</button>
       <button class="btn" id="exCsv">CSV書き出し</button>
     </div>
-    <label>バックアップから復元</label><input type="file" id="imFile" accept=".json,application/json">
+    <button class="btn full" style="margin-top:10px" onclick="exportSpots()">📤 付け場だけ書き出し（売上は含みません）</button>
+    <label>バックアップ・付け場ファイルを読み込む</label><input type="file" id="imFile" accept=".json,application/json">
     <button class="btn r full" style="margin-top:14px" id="wipe">全データ削除</button>
   </div>
   <div class="card sub">
@@ -878,10 +880,36 @@ $('exCsv').onclick=()=>{
   D.rides.forEach(r=>rows.push([r.kind==='app'?'アプリ':r.kind==='wait'?'待機':'流し',r.service,f(r.callAt),areaName(r.callArea,'t'),f(r.pickAt),areaName(r.pickArea,'t'),f(r.dropAt),areaName(r.dropArea,'t'),r.fare||'',r.waitMs?Math.round(r.waitMs/60000):'',r.cancelled?'1':'',r.pickPos?.lat??'',r.pickPos?.lng??'',r.callPos?.lat??'',r.callPos?.lng??''].map(q).join(',')));
   download('taxilog-'+stamp()+'.csv','﻿'+rows.join('\n'),'text/csv');
 };
-$('imFile').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const j=JSON.parse(await f.text());if(!j.rides||!j.shifts)throw 0;
+async function shareOrDownload(name,text,title){
+  try{const f=new File([text],name,{type:'application/json'});if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title});return;}}catch(e){if(e&&e.name==='AbortError')return;}
+  download(name,text,'application/json');
+}
+function exportSpots(){
+  const sp=(D.spots||[]).map(({id,name,type,memo,lat,lng})=>({id,name,type,memo,lat,lng}));
+  if(!sp.length){toast('付け場がまだありません');return;}
+  shareOrDownload('taxilog-spots-'+stamp()+'.json',JSON.stringify({type:'taxilog-spots',v:1,spots:sp}),'TaxiLog 付け場');
+}
+function mergeSpots(list){
+  D.spots=D.spots||[];let add=0,skip=0;
+  list.forEach(x=>{if(!x||!x.name||typeof x.lat!=='number'||typeof x.lng!=='number'){skip++;return;}
+    const dup=D.spots.some(y=>y.id===x.id||(y.name===x.name&&distM(y,x)<50));
+    if(dup){skip++;return;}
+    D.spots.push({id:x.id||uid(),name:String(x.name).slice(0,60),type:SPOT_TYPES.includes(x.type)?x.type:'その他',memo:String(x.memo||'').slice(0,300),lat:x.lat,lng:x.lng,created:now()});add++;});
+  save();return [add,skip];
+}
+async function importFile(inp){
+  const f=inp.files[0];if(!f)return;
+  try{const j=JSON.parse(await f.text());
+    if(j.type==='taxilog-spots'&&Array.isArray(j.spots)){const [a,sk]=mergeSpots(j.spots);toast(`付け場を${a}件追加`+(sk?`（${sk}件は登録済み）`:''));if(view==='spot')renderSpots();}
+    else await importBackup(j);
+  }catch(err){toast('ファイルの形式が違います');}
+  inp.value='';
+}
+async function importBackup(j){if(!j.rides||!j.shifts)throw 0;
   const ids=new Set(D.rides.map(r=>r.id)),sids=new Set(D.shifts.map(s=>s.id)),wids=new Set(D.waits.map(w=>w.id));
   j.shifts.forEach(s=>!sids.has(s.id)&&D.shifts.push(s));j.rides.forEach(r=>!ids.has(r.id)&&D.rides.push(r));(j.waits||[]).forEach(w=>!wids.has(w.id)&&D.waits.push(w));const spi=new Set((D.spots||[]).map(x=>x.id)),evi=new Set((D.spotEvents||[]).map(x=>x.id));D.spots=D.spots||[];D.spotEvents=D.spotEvents||[];(j.spots||[]).forEach(x=>!spi.has(x.id)&&D.spots.push(x));(j.spotEvents||[]).forEach(x=>!evi.has(x.id)&&D.spotEvents.push(x));Object.assign(D.geo,j.geo||{});
-  D.shifts.sort((a,b)=>a.start-b.start);save();renderAll();toast('復元しました');}catch(err){toast('ファイルの形式が違います');}e.target.value='';};
+  D.shifts.sort((a,b)=>a.start-b.start);save();renderAll();toast('復元しました');}
+$('imFile').onchange=e=>importFile(e.target);
 $('wipe').onclick=()=>sheet(`<div class="ttl">全データを削除しますか？</div><div class="sub" style="margin-top:6px">元に戻せません。先にバックアップを。</div><div class="grid2" style="margin-top:14px"><button class="btn" onclick="closeSheet()">戻る</button><button class="btn r" onclick="localStorage.removeItem(KEY);location.reload()">削除</button></div>`);
 
 /* ============ spots (付け場) ============ */
