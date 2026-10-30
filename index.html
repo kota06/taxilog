@@ -99,6 +99,19 @@ input,select,textarea{width:100%;font-size:16px;padding:10px;border:1px solid va
 .gps{font-size:11px;color:var(--sub);text-align:center;margin-top:8px}
 .shift{border-bottom:1px solid var(--line);padding:10px 0}
 .shift:last-child{border-bottom:0}
+.split{display:grid;grid-template-columns:1fr 128px;gap:10px;align-items:stretch}
+.appcol{background:linear-gradient(160deg,#1e4fd0,#1a3fa8);border-radius:18px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.apph{font-weight:800;font-size:14px;color:#fff}.apph small{display:block;font-weight:500;font-size:11px;opacity:.75}
+.appb{flex:1;min-height:52px;border:1.5px solid rgba(255,255,255,.45);background:rgba(0,0,0,.2);color:#fff;border-radius:12px;font-weight:800;font-size:18px}
+.appb.first{background:#fff;color:#111;border-color:#fff}
+.appb:active,.sideb:active{transform:scale(.97)}
+.sidecol{display:flex;flex-direction:column;gap:10px}
+.sideb{flex:1;border:0;border-radius:18px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:96px;padding:6px}
+.sideb .ic{font-size:26px}.sideb b{font-size:19px}.sideb small{font-size:11px;opacity:.75;font-weight:500}
+.sideb.nag{background:linear-gradient(135deg,#ff8c00,#ff6a00);color:#2a1300}
+.sideb.wt{background:var(--green);color:#06281d}
+.sideb.br{background:transparent;border:2px solid #f5a524;color:#f5a524;min-height:70px;flex:.7}
+.sideb.gray{background:var(--gray);color:var(--ink)}
 .legend{display:flex;gap:12px;font-size:12px;color:var(--sub);margin-top:8px;flex-wrap:wrap}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:-1px}
 .leaflet-popup-content{font-size:13px}
@@ -278,7 +291,7 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
     <label>1出番の目標営収（円・日報グラフ用）</label><input id="sDayGoal" type="number" inputmode="numeric" placeholder="50000">
     <label>1出番の予定拘束時間（時間・目標ペース線用）</label><input id="sShiftH" type="number" inputmode="decimal" placeholder="20">
     <label>迎車料金（標準・円）</label><input id="sFee" type="number" inputmode="numeric" placeholder="500">
-    <label>アプリ配車のボタン（カンマ区切り）</label><input id="sSvc" placeholder="GO,S.RIDE,Uber,DiDi,無線">
+    <label>アプリ配車のボタン（カンマ区切り）</label><input id="sSvc" placeholder="GO,スマハイ">
     <label><input type="checkbox" id="sWake" style="width:auto;vertical-align:middle"> 出庫中は画面を消さない</label>
     <button class="btn g full" style="margin-top:12px" id="sSave">保存</button>
   </div>
@@ -328,8 +341,9 @@ function vib(){try{navigator.vibrate&&navigator.vibrate(30);}catch(e){}}
 
 /* ============ data ============ */
 const KEY='taxilog-v1';
-let D={shifts:[],rides:[],waits:[],spots:[],spotEvents:[],state:{mode:'off'},settings:{goal:0,plan:0,rate:0,svc:'GO,S.RIDE,Uber,DiDi,無線',pays:'現金,カード,QR,アプリ決済,チケット',wake:true,pickFee:500,dayGoal:0,shiftH:20,mapStyle:'std',dayGoals:{}},geo:{}};
-try{const j=JSON.parse(localStorage.getItem(KEY)||'null');if(j){Object.assign(D,j);D.settings=Object.assign({goal:0,plan:0,rate:0,svc:'GO,S.RIDE,Uber,DiDi,無線',pays:'現金,カード,QR,アプリ決済,チケット',wake:true,pickFee:500,dayGoal:0,shiftH:20,mapStyle:'std',dayGoals:{}},j.settings||{});D.geo=j.geo||{};}}catch(e){}
+let D={shifts:[],rides:[],waits:[],spots:[],spotEvents:[],state:{mode:'off'},settings:{goal:0,plan:0,rate:0,svc:'GO,スマハイ',pays:'現金,カード,QR,アプリ決済,チケット',wake:true,pickFee:500,dayGoal:0,shiftH:20,mapStyle:'std',dayGoals:{}},geo:{}};
+try{const j=JSON.parse(localStorage.getItem(KEY)||'null');if(j){Object.assign(D,j);D.settings=Object.assign({goal:0,plan:0,rate:0,svc:'GO,スマハイ',pays:'現金,カード,QR,アプリ決済,チケット',wake:true,pickFee:500,dayGoal:0,shiftH:20,mapStyle:'std',dayGoals:{}},j.settings||{});D.geo=j.geo||{};}}catch(e){}
+if(D.settings.svc==='GO,S.RIDE,Uber,DiDi,無線')D.settings.svc='GO,スマハイ';
 function save(){try{localStorage.setItem(KEY,JSON.stringify(D));}catch(e){toast('保存に失敗しました（容量不足？）');}}
 const S=()=>D.state;
 const curShift=()=>D.shifts.find(s=>s.id===S().shiftId);
@@ -515,8 +529,10 @@ function actionsHTML(m){
   const svc=svcList().map((s,i)=>`<button class="chip ${i===0?'go':''}" onclick="appCall('${esc(s)}')">${esc(s)}</button>`).join('');
   const appCard=`<div class="app"><div class="row"><div style="font-size:26px">📶</div><div><div class="h">アプリ配車</div><div class="s">鳴った瞬間にタップ → その場所を記録</div></div></div><div class="chips">${svc}</div></div>`;
   if(m==='off')return `<button class="big full" style="background:var(--green);color:#06281d;width:100%;border:0" onclick="startShift()"><span class="ic">🔑</span>出庫する<small>位置情報の許可が出たら「許可」</small></button>`;
-  if(m==='empty')return `<div class="grid2"><button class="big" style="background:var(--green);color:#06281d" onclick="startWait()"><span class="ic">▶</span>待機開始<small>現在地を記録</small></button><button class="big" style="background:linear-gradient(135deg,#ff8c00,#ff6a00);color:#2a1300" onclick="pickup()"><span class="ic">🚕</span>流し<small>乗車時にタップ</small></button></div>${appCard}`;
-  if(m==='wait')return `<div class="grid2"><button class="big" style="background:var(--gray);color:var(--ink)" onclick="cancelWait()"><span class="ic">■</span>待機やめる<small>乗せずに移動</small></button><button class="big" style="background:linear-gradient(135deg,#ff8c00,#ff6a00);color:#2a1300" onclick="pickup()"><span class="ic">🚕</span>乗車<small>待機から乗車</small></button></div>${appCard}`;
+  const appCol=`<div class="appcol"><div class="apph">📶 アプリ・無線<small>鳴ったらタップ</small></div>${svcList().map((v,i)=>`<button class="appb ${i===0?'first':''}" onclick="appCall('${esc(v)}')">${esc(v)}</button>`).join('')}</div>`;
+  const side=(btns)=>`<div class="sidecol">${btns.map(([cls,ic,l,sub,fn])=>`<button class="sideb ${cls}" onclick="${fn}"><span class="ic">${ic}</span><b>${l}</b><small>${sub}</small></button>`).join('')}</div>`;
+  if(m==='empty')return `<div class="split">${appCol}${side([['nag','🚕','流し','乗車時にタップ','pickup()'],['wt','▶','待機','現在地を記録','startWait()'],['br','☕','休憩','','startBreak()']])}</div>`;
+  if(m==='wait')return `<div class="split">${appCol}${side([['nag','🚕','乗車','待機から乗車','pickup()'],['gray','■','待機やめる','乗せずに移動','cancelWait()'],['br','☕','休憩','','startBreak()']])}</div>`;
   if(m==='call')return `<div class="grid2"><button class="big" style="background:var(--gray);color:var(--ink)" onclick="cancelCall()"><span class="ic">✕</span>キャンセル<small>乗車なし</small></button><button class="big" style="background:linear-gradient(135deg,#ff8c00,#ff6a00);color:#2a1300" onclick="pickup()"><span class="ic">🙋</span>乗車<small>お客様が乗ったら</small></button></div>`;
   if(m==='ride')return `<button class="big" style="background:var(--green);color:#06281d;width:100%" onclick="dropoff()"><span class="ic">🏁</span>降車・料金入力<small>降車地点を記録</small></button>`;
   if(m==='break')return `<button class="big" style="background:var(--yellow);color:#2a2100;width:100%" onclick="endBreak()"><span class="ic">☕</span>休憩終了</button>`;
@@ -528,7 +544,7 @@ function renderHome(){
   const [lbl,col]=MODES[m]||MODES.off;
   $('statusPill').innerHTML=`<i style="background:${col}"></i><span style="color:${col}">${lbl}</span>`;
   $('shiftBtn').textContent=m==='off'?'🔑 出庫する':'🏠 入庫 ››';
-  $('breakBtn').classList.toggle('hide',!(m==='empty'||m==='wait'));
+  $('breakBtn').classList.add('hide');
   if(lastActMode!==m||$('actions').dataset.svc!==D.settings.svc){$('actions').innerHTML=actionsHTML(m);$('actions').dataset.svc=D.settings.svc;lastActMode=m;}
   tick();renderToday();
 }
