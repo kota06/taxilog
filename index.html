@@ -172,6 +172,7 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
       <div style="flex:1">
         <div><span class="k">拘束</span> <span class="v" id="mBind">00:00:00</span> <span class="k">休憩計</span> <span class="v" id="mBreak">0m</span></div>
         <div style="margin-top:4px"><span class="k">時間営収</span> <span class="v" id="mHour" style="font-size:20px">¥0/h</span></div>
+        <div style="margin-top:4px"><span class="k">営収</span> <span class="v" id="mFare">¥0</span> <span class="k">税抜</span> <span class="v" id="mEx">¥0</span></div>
       </div>
       <button class="btn y sm" id="breakBtn">☕ 休憩</button>
     </div>
@@ -335,6 +336,7 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const hm=t=>{const d=new Date(t);return pad(d.getHours())+':'+pad(d.getMinutes());};
 const dur=(ms,sec)=>{ms=Math.max(0,ms);const s=Math.floor(ms/1000),h=Math.floor(s/3600),m=Math.floor(s%3600/60);return sec?(h?pad(h)+':':'')+pad(m)+':'+pad(s%60):(h?h+'h':'')+m+'m';};
 const hms=ms=>{const s=Math.max(0,Math.floor(ms/1000));return pad(Math.floor(s/3600))+':'+pad(Math.floor(s%3600/60))+':'+pad(s%60);};
+const exTax=v=>Math.floor((v||0)/1.1);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let tt;function toast(m){const t=$('toast');t.textContent=m;t.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('on'),1800);}
 function vib(){try{navigator.vibrate&&navigator.vibrate(30);}catch(e){}}
@@ -551,8 +553,8 @@ function renderHome(){
 function tick(){
   const st=S(),m=st.mode,s=curShift(),t=now();
   const d=new Date();$('clock').textContent=pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
-  if(s){const x=shiftStats(s);$('mBind').textContent=hms(x.bind);$('mBreak').textContent=dur(x.brk);$('mHour').textContent=x.bind-x.brk<900000?'計測中':yen(x.hour)+'/h';$('topFare').textContent=yen(x.fare);$('topCnt').textContent=x.cnt+'回';}
-  else{$('mBind').textContent='00:00:00';$('mBreak').textContent='0m';$('mHour').textContent='¥0/h';const last=D.shifts[D.shifts.length-1];if(last){const x=shiftStats(last);$('topFare').textContent=yen(x.fare);$('topCnt').textContent=x.cnt+'回';}}
+  if(s){const x=shiftStats(s);$('mBind').textContent=hms(x.bind);$('mBreak').textContent=dur(x.brk);$('mHour').textContent=x.bind-x.brk<900000?'計測中':yen(x.hour)+'/h';$('topFare').textContent=yen(x.fare);$('topCnt').textContent=x.cnt+'回';$('mFare').textContent=yen(x.fare);$('mEx').textContent=yen(exTax(x.fare));}
+  else{$('mFare').textContent='¥0';$('mEx').textContent='¥0';$('mBind').textContent='00:00:00';$('mBreak').textContent='0m';$('mHour').textContent='¥0/h';const last=D.shifts[D.shifts.length-1];if(last){const x=shiftStats(last);$('topFare').textContent=yen(x.fare);$('topCnt').textContent=x.cnt+'回';}}
   const T=$('tVal'),L=$('tLabel'),Sb=$('tSub');T.className='timer';
   if(m==='off'){L.textContent='空車時間';T.textContent='00:00';Sb.textContent='「出庫する」を押して開始';}
   else if(m==='empty'){L.textContent='空車時間';T.textContent=dur(t-(st.emptySince||t),true);Sb.textContent='待機・流し・アプリ配車をタップ';}
@@ -628,7 +630,7 @@ function renderReport(){
   for(let d=1;d<=days;d++){const k=pre+'-'+pad(d);h+=`<button class="d ${has.has(k)?'has':''} ${k===rSel?'sel':''} ${k===tk?'today':''}" onclick="rSel='${k}';renderReport()">${d}</button>`;}
   $('rCal').innerHTML=h;
   const ms=D.shifts.filter(s=>dkey(s.start).startsWith(pre)),mst=dayStats(ms),g=+D.settings.goal||0;
-  $('rMonthSum').innerHTML=`今月 ${ms.length}出番 ・ <b style="color:var(--green)">${yen(mst.fare)}</b> ・ ${mst.cnt}回`+(g?` ・ 月目標の${Math.round(mst.fare/g*100)}%`:'')+(D.settings.rate?` ・ 給与目安 ${yen(mst.fare/1.1*D.settings.rate/100)}`:'');
+  $('rMonthSum').innerHTML=`今月 ${ms.length}出番 ・ <b style="color:var(--green)">${yen(mst.fare)}</b>（税抜 ${yen(exTax(mst.fare))}）・ ${mst.cnt}回`+(g?` ・ 月目標の${Math.round(mst.fare/g*100)}%`:'')+(D.settings.rate?` ・ 給与目安 ${yen(mst.fare/1.1*D.settings.rate/100)}`:'');
   renderDay();
 }
 const tile=(l,v,c)=>`<div class="tl left"><div class="l">${l}</div><div class="n" style="color:${c||'var(--ink)'}">${v}</div></div>`;
@@ -650,10 +652,12 @@ function renderDay(){
   const x=dayStats(ss),avg=x.cnt?x.fare/x.cnt:0,rate=x.bind?x.ride/x.bind:0,hourly=x.work>0?x.fare/(x.work/3600000):0;
   let h=`<div class="card"><div class="ttl">📊 ${title} サマリー</div>
   <div class="tiles" style="margin-top:12px">
-   <div class="tl"><div class="l">営収合計</div><div class="n" style="color:var(--green)">${yen(x.fare)}</div></div>
+   <div class="tl"><div class="l">営収合計（税込）</div><div class="n" style="color:var(--green)">${yen(x.fare)}</div></div>
+   <div class="tl"><div class="l">税抜営収</div><div class="n">${yen(exTax(x.fare))}</div></div>
    <div class="tl"><div class="l">乗車回数</div><div class="n">${x.cnt}<small style="font-size:13px;color:var(--green)">回</small></div></div>
    <div class="tl"><div class="l">平均単価</div><div class="n">${yen(avg)}</div></div>
    <div class="tl"><div class="l">最高単価</div><div class="n" style="color:var(--yellow)">${yen(x.max)}</div></div>
+   <div class="tl"><div class="l">税抜 時間あたり</div><div class="n">${yen(exTax(hourly))}/h</div></div>
   </div>
   <div class="t6">${[['拘束',x.bind,''],['実車',x.ride,'var(--green)'],['迎車',x.pick,'#8fb2ff'],['待機',x.wait,'var(--yellow)'],['休憩',x.brk,'var(--sub)'],['空車',x.empty,'var(--red)']].map(([l,v,c])=>`<div class="tl"><div class="l">${l}</div><div class="n" style="color:${c||'var(--ink)'}">${hmin(v)}</div></div>`).join('')}</div>
   <div class="tiles" style="margin-top:10px">
