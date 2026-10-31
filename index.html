@@ -227,7 +227,7 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
   </div>
   <div id="map"></div>
   <div class="sub" id="mapMsg" style="margin-top:6px"></div>
-  <div class="legend"><span><i style="background:#ff2d2d"></i>GO等が鳴った場所</span><span><i style="background:#2563eb"></i>流しで乗車</span><span><i style="background:#16a34a"></i>待機から乗車</span><span><i style="background:#6b7280"></i>降車</span><span><i style="border:2px solid #ff2d2d;width:7px;height:7px"></i>キャンセル</span></div>
+  <div class="legend"><span><i style="background:#ff2d2d"></i>鳴った場所</span><span><i style="background:#2563eb"></i>乗車した場所</span><span><i style="background:#6b7280"></i>降車</span><span><i style="border:2px solid #ff2d2d;width:7px;height:7px"></i>キャンセル</span></div>
 </section>
 
 <!-- ================= ANALYSIS ================= -->
@@ -860,8 +860,7 @@ function drawMap(){
     if(!F(r.shiftId,r.pickAt||r.callAt))return;
     const f=r.fare?yen(r.fare):'';
     if(mk.call&&r.kind==='app'&&r.callPos)add(r.callPos,C_CALL,`<b>${esc(r.service)} 受信</b> ${hm(r.callAt)}<br>${esc(areaName(r.callArea,'t'))}${r.cancelled?'<br>キャンセル':'<br>'+f}`,r.callAt,r.cancelled);
-    if(mk.pick&&r.pickPos&&r.kind!=='app')add(r.pickPos,r.kind==='wait'?C_WAIT:C_NAGASHI,`<b>${r.kind==='wait'?'待機':'流し'}乗車</b> ${hm(r.pickAt)}<br>${esc(areaName(r.pickArea,'t'))}<br>${f}${r.waitMs?'<br>待機 '+dur(r.waitMs):''}`,r.pickAt);
-    if(mk.pick&&r.pickPos&&r.kind==='app'&&!mk.call)add(r.pickPos,C_CALL,`<b>${esc(r.service)} 乗車</b> ${hm(r.pickAt)}<br>${f}`,r.pickAt);
+    if(mk.pick&&r.pickPos&&!r.cancelled)add(r.pickPos,C_NAGASHI,`<b>${r.kind==='app'?esc(r.service||'アプリ'):r.kind==='wait'?'待機':'流し'} 乗車</b> ${hm(r.pickAt)}<br>${esc(areaName(r.pickArea,'t'))}<br>${f}${r.waitMs?'<br>待機 '+dur(r.waitMs):''}${r.callAt&&r.pickAt?'<br>迎車 '+mins(r.pickAt-r.callAt)+'分':''}`,r.pickAt);
     if(mk.drop&&r.dropPos)add(r.dropPos,C_DROP,`<b>降車</b> ${hm(r.dropAt)}<br>${esc(areaName(r.dropArea,'t'))}<br>${f}`,r.dropAt);
   });
   if(mk.spot)(D.spots||[]).forEach(sp=>{const st=spotStats(sp);L.marker([sp.lat,sp.lng],{icon:spotIcon()}).bindPopup(`<b>${esc(sp.name)}</b><br>乗車${st.picks}回・平均${st.picks?yen(st.avg):'-'}<br>待機${st.waits}回${st.ok?'・平均'+mins(st.avgWait)+'分':''}<br><a href="#" onclick="spotDetail('${sp.id}');return false">詳細を見る</a>`).addTo(layer);});
