@@ -224,6 +224,9 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
       <input type="date" id="mDate" class="hide" style="flex:1">
       <select id="mHourSel" style="flex:1"></select>
     </div>
+    <div class="row" style="margin-top:8px"><span class="sub" style="white-space:nowrap">料金</span>
+      <select id="mFmin" style="flex:1"></select><span class="sub">〜</span><select id="mFmax" style="flex:1"></select>
+    </div>
   </div>
   <div id="map"></div>
   <div class="sub" id="mapMsg" style="margin-top:6px"></div>
@@ -858,6 +861,7 @@ function drawMap(){
   const add=(p,color,html,t,hollow)=>{if(!p||!hOK(t))return;pts.push([p.lat,p.lng]);L.circleMarker([p.lat,p.lng],{radius:8,color:hollow?color:'#fff',weight:hollow?3:2,fillColor:color,fillOpacity:hollow?.15:.95}).bindPopup(html).addTo(layer);};
   D.rides.forEach(r=>{
     if(!F(r.shiftId,r.pickAt||r.callAt))return;
+    const fmin=+$('mFmin').value,fmax=+$('mFmax').value;if(fmin||fmax){if(r.cancelled||!r.fare)return;if(fmin&&r.fare<fmin)return;if(fmax&&r.fare>=fmax)return;}
     const f=r.fare?yen(r.fare):'';
     if(mk.call&&r.kind==='app'&&r.callPos)add(r.callPos,C_CALL,`<b>${esc(r.service)} 受信</b> ${hm(r.callAt)}<br>${esc(areaName(r.callArea,'t'))}${r.cancelled?'<br>キャンセル':'<br>'+f}`,r.callAt,r.cancelled);
     if(mk.pick&&r.pickPos&&!r.cancelled)add(r.pickPos,C_NAGASHI,`<b>${r.kind==='app'?esc(r.service||'アプリ'):r.kind==='wait'?'待機':'流し'} 乗車</b> ${hm(r.pickAt)}<br>${esc(areaName(r.pickArea,'t'))}<br>${f}${r.waitMs?'<br>待機 '+dur(r.waitMs):''}${r.callAt&&r.pickAt?'<br>迎車 '+mins(r.pickAt-r.callAt)+'分':''}`,r.pickAt);
@@ -868,8 +872,9 @@ function drawMap(){
   if(mapFocus){map.setView(mapFocus,16);mapFocus=null;}
 }
 let lastPts=[];
+(function(){const st=[];for(let v=1000;v<=20000;v+=1000)st.push(v);st.push(25000,30000);$('mFmin').innerHTML='<option value="0">下限なし</option>'+st.map(v=>`<option value="${v}">¥${v.toLocaleString()}以上</option>`).join('');$('mFmax').innerHTML='<option value="0">上限なし</option>'+st.map(v=>`<option value="${v}">¥${v.toLocaleString()}未満</option>`).join('');})();
 (function(){const o=['<option value="all">全時間帯</option>'];for(let h=0;h<24;h++)o.push(`<option value="${h}-${h+1}">${h}時台</option>`);$('mHourSel').innerHTML=o.join('');})();
-['mPeriod','mDow','mDate','mHourSel'].forEach(id=>$(id).onchange=()=>{if(id==='mPeriod'&&$('mPeriod').value==='date'&&!$('mDate').value)$('mDate').value=dkey(now());drawMap();});
+['mPeriod','mDow','mDate','mHourSel','mFmin','mFmax'].forEach(id=>$(id).onchange=()=>{const a=+$('mFmin').value,b=+$('mFmax').value;if(a&&b&&a>=b){if(id==='mFmin')$('mFmax').value='0';else $('mFmin').value='0';}if(id==='mPeriod'&&$('mPeriod').value==='date'&&!$('mDate').value)$('mDate').value=dkey(now());drawMap();});
 
 /* ============ analysis ============ */
 let aAxis='pick';
