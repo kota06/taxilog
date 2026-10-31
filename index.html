@@ -99,6 +99,9 @@ input,select,textarea{width:100%;font-size:16px;padding:10px;border:1px solid va
 .gps{font-size:11px;color:var(--sub);text-align:center;margin-top:8px}
 .shift{border-bottom:1px solid var(--line);padding:10px 0}
 .shift:last-child{border-bottom:0}
+.status.rz{border:2px solid #3a4252;color:var(--sub);font-size:14px;cursor:pointer}
+.status.rz.on{border-color:#6ea0ff;background:#16264d;color:#cfe0ff}
+.rzt{font-family:var(--mono);font-size:14px;color:#8fb2ff;margin-top:10px;font-weight:700}
 .split{display:grid;grid-template-columns:1fr 128px;gap:10px;align-items:stretch}
 .appcol{background:linear-gradient(160deg,#1e4fd0,#1a3fa8);border-radius:18px;padding:10px;display:flex;flex-direction:column;gap:8px}
 .apph{font-weight:800;font-size:14px;color:#fff}.apph small{display:block;font-weight:500;font-size:11px;opacity:.75}
@@ -167,12 +170,14 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
       <div class="ttl">現在のステータス</div><div class="sp"></div>
       <button class="btn sm" id="shiftBtn">🔑 出庫する</button>
     </div>
-    <div class="status" id="statusPill"><i></i><span>未出庫</span></div>
+    <div class="row" style="flex-wrap:wrap;gap:8px"><div class="status" id="statusPill"><i></i><span>未出庫</span></div>
+    <button class="status rz" id="rzBtn" onclick="toggleRenzoku()"><span id="rzLbl">連続配車 OFF</span></button>
+    <span class="rzt" id="rzTime"></span></div>
     <div class="meta" id="metaBox">
       <div style="flex:1">
         <div><span class="k">拘束</span> <span class="v" id="mBind">00:00:00</span> <span class="k">休憩計</span> <span class="v" id="mBreak">0m</span></div>
-        <div style="margin-top:4px"><span class="k">時間営収</span> <span class="v" id="mHour" style="font-size:20px">¥0/h</span></div>
-        <div style="margin-top:4px"><span class="k">営収</span> <span class="v" id="mFare">¥0</span> <span class="k">税抜</span> <span class="v" id="mEx">¥0</span></div>
+        <div style="margin-top:4px"><span class="k">営収</span> <span class="v" id="mFare" style="font-size:20px">¥0</span> <span class="k">税抜</span> <span class="v" id="mEx" style="font-size:20px">¥0</span></div>
+        <div style="margin-top:4px"><span class="k">時間営収</span> <span class="v" id="mHour">¥0/h</span></div>
       </div>
       <button class="btn y sm" id="breakBtn">☕ 休憩</button>
     </div>
@@ -417,7 +422,17 @@ function endShiftAsk(){
   sheet(`<div class="ttl">入庫しますか？</div>${shiftSummaryHTML(curShift(),true)}
   <div class="grid2" style="margin-top:14px"><button class="btn" onclick="closeSheet()">戻る</button><button class="btn g" onclick="endShift()">入庫する</button></div>`);
 }
+const rzTotal=s=>(s&&s.renzoku||[]).reduce((a,r)=>a+((r.e||(s.end?s.end:now()))-r.s),0);
+const rzOn=s=>{const l=s&&s.renzoku&&s.renzoku[s.renzoku.length-1];return !!(l&&!l.e);};
+function toggleRenzoku(){
+  const s=curShift();if(!s){toast('出庫してから切り替えてください');return;}
+  s.renzoku=s.renzoku||[];
+  if(rzOn(s)){s.renzoku[s.renzoku.length-1].e=now();toast('連続配車をOFFにしました');}
+  else{s.renzoku.push({s:now(),e:null});toast('連続配車をONにしました');}
+  save();vib();tick();
+}
 function endShift(){
+  {const s0=curShift();if(rzOn(s0))s0.renzoku[s0.renzoku.length-1].e=now();}
   if(S().mode==='wait')stopWait('abandon');
   if(S().mode==='break')endBreak(true);
   const s=curShift();if(s)s.end=now();
@@ -555,6 +570,7 @@ function renderHome(){
 }
 function tick(){
   const st=S(),m=st.mode,s=curShift(),t=now();
+  {const on=rzOn(s),tot=rzTotal(s);$('rzBtn').classList.toggle('hide',!s);$('rzBtn').classList.toggle('on',on);$('rzLbl').textContent=on?'🔁 連続配車 ON':'連続配車 OFF';$('rzTime').textContent=s&&tot?'計 '+hms(tot):'';}
   const d=new Date();$('clock').textContent=pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
   if(s){const x=shiftStats(s);$('mBind').textContent=hms(x.bind);$('mBreak').textContent=dur(x.brk);$('mHour').textContent=x.bind-x.brk<900000?'計測中':yen(x.hour)+'/h';$('topFare').textContent=yen(x.fare);$('topCnt').textContent=x.cnt+'回';$('mFare').textContent=yen(x.fare);$('mEx').textContent=yen(exTax(x.fare));}
   else{$('mFare').textContent='¥0';$('mEx').textContent='¥0';$('mBind').textContent='00:00:00';$('mBreak').textContent='0m';$('mHour').textContent='¥0/h';const last=D.shifts[D.shifts.length-1];if(last){const x=shiftStats(last);$('topFare').textContent=yen(x.fare);$('topCnt').textContent=x.cnt+'回';}}
@@ -662,7 +678,7 @@ function renderDay(){
    <div class="tl"><div class="l">最高単価</div><div class="n" style="color:var(--yellow)">${yen(x.max)}</div></div>
    <div class="tl"><div class="l">税抜 時間あたり</div><div class="n">${yen(exTax(hourly))}/h</div></div>
   </div>
-  <div class="t6">${[['拘束',x.bind,''],['実車',x.ride,'var(--green)'],['迎車',x.pick,'#8fb2ff'],['待機',x.wait,'var(--yellow)'],['休憩',x.brk,'var(--sub)'],['空車',x.empty,'var(--red)']].map(([l,v,c])=>`<div class="tl"><div class="l">${l}</div><div class="n" style="color:${c||'var(--ink)'}">${hmin(v)}</div></div>`).join('')}</div>
+  <div class="t6">${[['拘束',x.bind,''],['実車',x.ride,'var(--green)'],['迎車',x.pick,'#8fb2ff'],['待機',x.wait,'var(--yellow)'],['連続配車',ss.reduce((a,s)=>a+rzTotal(s),0),'#8fb2ff'],['休憩',x.brk,'var(--sub)'],['空車',x.empty,'var(--red)']].map(([l,v,c])=>`<div class="tl"><div class="l">${l}</div><div class="n" style="color:${c||'var(--ink)'}">${hmin(v)}</div></div>`).join('')}</div>
   <div class="tiles" style="margin-top:10px">
    <div class="tl"><div class="l">稼働率（実車÷拘束）</div><div class="n" style="color:${rate<.35?'var(--red)':'var(--green)'}">${Math.round(rate*100)}%</div></div>
    <div class="tl"><div class="l">時間あたり営収</div><div class="n" style="color:var(--green)">${yen(hourly)}/h</div></div>
