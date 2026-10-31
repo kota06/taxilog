@@ -561,7 +561,7 @@ function tick(){
   const T=$('tVal'),L=$('tLabel'),Sb=$('tSub');T.className='timer';
   if(m==='off'){L.textContent='空車時間';T.textContent='00:00';Sb.textContent='「出庫する」を押して開始';}
   else if(m==='empty'){L.textContent='空車時間';T.textContent=dur(t-(st.emptySince||t),true);Sb.textContent='待機・流し・アプリ配車をタップ';}
-  else if(m==='wait'){const w=curWait();if(w&&!w.spotId&&w.waitPos){const ns=nearestSpot(w.waitPos);if(ns){w.spotId=ns.id;save();}}const sp=w&&w.spotId&&(D.spots||[]).find(x=>x.id===w.spotId);L.textContent='待機時間';T.textContent=dur(t-(w?w.start:t),true);const q=w&&w.queue?' ・ 🚕'+w.queue+'台目':' ・ 台数を入力';if(sp){const st=spotStats(sp);Sb.textContent='📍 '+sp.name+q+(st.ok?'（平均'+mins(st.avgWait)+'分）':'');}else Sb.textContent=(w&&w.waitArea?'📍 '+areaName(w.waitArea,'t'):'📍 位置を取得中…')+q;}
+  else if(m==='wait'){const w=curWait();if(w&&!w.spotId&&!w.noSpot&&w.waitPos){const ns=nearestSpot(w.waitPos);if(ns){w.spotId=ns.id;save();}}const sp=w&&w.spotId&&(D.spots||[]).find(x=>x.id===w.spotId);L.textContent='待機時間';T.textContent=dur(t-(w?w.start:t),true);const q=w&&w.queue?' ・ 🚕'+w.queue+'台目':' ・ 台数を入力';if(sp){const st=spotStats(sp);Sb.textContent='📍 '+sp.name+q+(st.ok?'（平均'+mins(st.avgWait)+'分）':'');}else Sb.textContent=(w&&w.waitArea?'📍 '+areaName(w.waitArea,'t'):'📍 位置を取得中…')+q;}
   else if(m==='call'){const r=curRide();T.className='timer b';L.textContent='迎車 '+(r?r.service:'');T.textContent=dur(t-(r?r.callAt:t),true);Sb.textContent=r&&r.callArea?'📶 受信: '+areaName(r.callArea,'t'):'📶 受信地点を取得中…';}
   else if(m==='ride'){const r=curRide();T.className='timer o';L.textContent='実車時間';T.textContent=dur(t-(r?r.pickAt:t),true);Sb.textContent=r&&r.pickArea?'🚕 乗車: '+areaName(r.pickArea,'t'):'🚕 乗車地点を取得中…';}
   else if(m==='break'){const b=s&&s.breaks[s.breaks.length-1];T.className='timer y';L.textContent='休憩中';T.textContent=dur(t-(b?b.s:t),true);Sb.textContent='';}
@@ -685,6 +685,7 @@ function renderDay(){
   h+=`<div class="card"><div style="font-weight:800">⏰ 1時間ごとの稼働分析</div><div class="secS" style="margin:4px 0 8px">実車・迎車・待機・休憩・空車の割合と、その時間に降車した売上</div><div id="hours"></div>
   <div class="lg2"><span><b style="background:var(--green)"></b>実車</span><span><b style="background:#6ea0ff"></b>迎車</span><span><b style="background:var(--yellow)"></b>待機</span><span><b style="background:#5b6475"></b>休憩</span><span><b style="background:#7a2a2a"></b>空車</span></div></div>`;
   h+=`<div class="card"><div class="row"><div style="font-weight:800">📋 ログ詳細</div><div class="sp"></div><button class="btn g sm" onclick="logAdd('${ss[ss.length-1].id}')">＋ ログを追加</button></div><div style="margin-top:10px">${x.rides.map(logCard).join('')||'<div class="sub">記録なし</div>'}</div>
+  ${(()=>{const ids=new Set(ss.map(s=>s.id)),ws=D.waits.filter(w=>ids.has(w.shiftId)).sort((a,b)=>a.start-b.start);return ws.length?`<div style="font-weight:800;margin:14px 0 8px">⏳ 待機の記録（${ws.length}件）</div>${ws.map(w=>waitCard(w)).join('')}`:'';})()}
   ${ss.map(s=>`<button class="btn r sm" style="margin-top:8px" onclick="delShiftAsk('${s.id}')">この出番を削除${ss.length>1?'（'+hm(s.start)+'〜）':''}</button>`).join(' ')}</div>`;
   box.innerHTML=h;
   drawCum(ss,x,goal);drawHours(ss,x);
@@ -914,7 +915,7 @@ function renderAna(){
   // waits
   const wa={};D.waits.filter(w=>w.end&&F(w.shiftId,w.start)).forEach(w=>{const an=areaName(w.waitArea,g);const o=wa[an]=wa[an]||{n:0,ms:0,ride:0,app:0,ab:0};o.n++;if(w.outcome==='ride'){o.ride++;o.ms+=w.end-w.start;}else if(w.outcome==='app')o.app++;else o.ab++;});
   const wk=Object.keys(wa).sort((a,b)=>wa[b].n-wa[a].n).slice(0,12);
-  $('aWait').innerHTML=wk.length?`<table class="rank"><tr><th>エリア</th><th>待機</th><th>乗車</th><th>平均待ち</th><th>空振り</th></tr>${wk.map(a=>{const o=wa[a];return `<tr><td>${esc(a)}</td><td>${o.n}</td><td>${o.ride}</td><td>${o.ride?dur(o.ms/o.ride):'-'}</td><td>${o.ab}</td></tr>`;}).join('')}</table>`:'<div class="sub">待機の記録がまだありません</div>';
+  $('aWait').innerHTML=wk.length?`<table class="rank"><tr><th>エリア</th><th>待機</th><th>乗車</th><th>平均待ち</th><th>空振り</th></tr>${wk.map(a=>{const o=wa[a];return `<tr onclick="waitListArea(decodeURIComponent('${encodeURIComponent(a)}'))"><td>${esc(a)}</td><td>${o.n}</td><td>${o.ride}</td><td>${o.ride?dur(o.ms/o.ride):'-'}</td><td>${o.ab}</td></tr>`;}).join('')}</table><div class="sub" style="margin-top:6px">行をタップすると、待機の記録を編集・削除できます</div>`:'<div class="sub">待機の記録がまだありません</div>';
   // hourly bars (pickups)
   const hb=Array(24).fill(0);RS.filter(done).forEach(r=>hb[new Date(r.pickAt).getHours()]+=r.fare||0);
   const hm2=Math.max(1,...hb);
@@ -982,7 +983,7 @@ const fmtDist=m=>m<1000?Math.round(m/10)*10+'m':(m/1000).toFixed(1)+'km';
 function nearestSpot(p,max){if(!p)return null;let best=null,bd=max||SPOT_R;(D.spots||[]).forEach(s=>{const d=distM(p,s);if(d<=bd){bd=d;best=s;}});return best;}
 function spotStats(sp){
   const near=p=>p&&distM(p,sp)<=SPOT_R;
-  const ws=D.waits.filter(w=>w.end&&(w.spotId===sp.id||(!w.spotId&&near(w.waitPos))));
+  const ws=D.waits.filter(w=>w.end&&(w.spotId===sp.id||(!w.spotId&&!w.noSpot&&near(w.waitPos))));
   const ok=ws.filter(w=>w.outcome==='ride');
   const picks=D.rides.filter(r=>done(r)&&near(r.pickPos));
   const calls=D.rides.filter(r=>r.kind==='app'&&near(r.callPos));
@@ -1053,7 +1054,7 @@ function spotDetail(id,keepFilter){
     if(l.w){const wm=l.w.end?mins(l.w.end-l.w.start):mins(now()-l.w.start);line+=` ・ 待機 ${wm}分`;if(l.w.queue)line+=` ・ 🚕${l.w.queue}台目`;
       if(l.r){if(l.type==='app')line+=` ・ ${esc(l.r.service||'アプリ')}${l.r.cancelled?'（取消）':''}`;if(l.r.dropArea||l.r.dropPos)line+=' → '+esc(aName(l.r.dropArea,l.r.dropPos));if(l.r.fare&&!l.r.cancelled)fare=yen(l.r.fare);}}
     else line+=' ・ 乗り場に車なし';
-    return `<div style="padding:10px 0;border-bottom:1px solid var(--line)"><div class="row"><span class="tag" style="background:${bg};color:${fg};font-size:13px;padding:4px 8px">${tl}</span><span class="sp"></span><b style="font-family:var(--mono);color:var(--green);font-size:16px">${fare}</b></div><div style="color:var(--green);font-size:13px;margin-top:5px">${line}</div></div>`;}).join('');
+    return `<div style="padding:10px 0;border-bottom:1px solid var(--line)" ${l.w&&l.type!=='now'?`onclick="waitEdit('${l.w.id}','spot:${s.id}')"`:''}><div class="row"><span class="tag" style="background:${bg};color:${fg};font-size:13px;padding:4px 8px">${tl}</span><span class="sp"></span><b style="font-family:var(--mono);color:var(--green);font-size:16px">${fare}</b></div><div style="color:var(--green);font-size:13px;margin-top:5px">${line}</div></div>`;}).join('');
   const canWait=S().mode==='empty'||S().mode==='wait';
   sheet(`<div class="row"><span style="font-size:24px">${SPOT_ICON[s.type]||'📍'}</span><div class="ttl" style="border:0;padding:0;font-size:18px">${esc(s.name)}</div><div class="sp"></div><span class="tag t-wait">${esc(s.type)}</span></div>
   ${s.memo?`<div class="sub" style="margin-top:6px;white-space:pre-wrap">${esc(s.memo)}</div>`:''}
@@ -1115,6 +1116,56 @@ $('spQ').oninput=renderSpots;
 $('spHour').onchange=e=>{spHour=+e.target.value;renderSpots();};
 (function(){$('spHour').innerHTML=Array.from({length:24},(_,h)=>`<option value="${h}" ${h===spHour?'selected':''}>${h}時台</option>`).join('');})();
 
+/* ============ wait edit ============ */
+const W_OUT={ride:['🟢 乗車','#0f3328','var(--green)'],app:['🔴 アプリ','#4a1518','#ff8f8f'],abandon:['⚪ 空振り','#2a3140','#aab2c2']};
+function waitPlace(w){const sp=w.spotId&&(D.spots||[]).find(x=>x.id===w.spotId);return sp?'📍'+sp.name:aName(w.waitArea,w.waitPos);}
+function waitCard(w,back){
+  const live=w.id===S().waitId,[tl,bg,fg]=live?['⏳ 待機中','#3a3210','var(--yellow)']:(W_OUT[w.outcome]||W_OUT.abandon);
+  const m=mins((w.end||now())-w.start);
+  return `<div class="logc" onclick="${live?'':`waitEdit('${w.id}','${back||''}')`}"><div class="lt"><span class="tm">${hm(w.start)}</span><span class="tag" style="background:${bg};color:${fg}">${tl}</span><span class="sub">待機${m}分${w.queue?' ・ 🚕'+w.queue+'台目':''}</span><span class="fr" style="font-size:13px;color:var(--sub)">${live?'':'編集 ›'}</span></div><div class="rt">${esc(waitPlace(w))}</div></div>`;
+}
+let weBack='';
+function waitEdit(id,back){
+  const w=D.waits.find(x=>x.id===id);if(!w)return;weBack=back||'';
+  const sp=(D.spots||[]).slice().sort((a,b)=>w.waitPos?distM(w.waitPos,a)-distM(w.waitPos,b):0);
+  const linked=D.rides.find(r=>r.waitId===w.id);
+  sheet(`<div class="ttl">待機の記録を編集</div>
+  <label>開始</label><input type="datetime-local" id="weS" value="${toIn(w.start)}">
+  <label>終了</label><input type="datetime-local" id="weE" value="${w.end?toIn(w.end):''}">
+  <label>結果</label><div class="sel chips" style="margin-top:0" id="weO">${Object.entries(W_OUT).map(([k,[l]])=>`<button class="chip ${w.outcome===k?'on':''}" data-k="${k}" onclick="document.querySelectorAll('#weO .chip').forEach(b=>b.classList.toggle('on',b===this))">${l}</button>`).join('')}</div>
+  <label>並び台数</label><select id="weQ"><option value="0">わからない</option>${Array.from({length:30},(_,i)=>`<option value="${i+1}" ${w.queue===i+1?'selected':''}>${i+1}台目</option>`).join('')}</select>
+  <label>付け場</label><select id="weSp"><option value="">（付け場なし）</option>${sp.map(s=>`<option value="${s.id}" ${w.spotId===s.id?'selected':''}>${esc(s.name)}${w.waitPos?'（'+fmtDist(distM(w.waitPos,s))+'）':''}</option>`).join('')}</select>
+  <div class="sub" style="margin-top:6px">場所: ${esc(aName(w.waitArea,w.waitPos))}${linked?' ・ この待機から乗車の記録あり':''}</div>
+  <button class="btn g full" style="margin-top:14px" onclick="waitSave('${w.id}')">保存</button>
+  <div class="grid2" style="margin-top:8px"><button class="btn" onclick="waitBack()">戻る</button><button class="btn r" onclick="waitDelAsk('${w.id}')">この待機を削除</button></div>`);
+}
+function waitSave(id){
+  const w=D.waits.find(x=>x.id===id);const st=fromIn($('weS').value),en=fromIn($('weE').value);
+  if(!st||!en){toast('開始と終了を入れてください');return;}if(en<st){toast('終了が開始より前です');return;}
+  const on=document.querySelector('#weO .chip.on');
+  w.start=st;w.end=en;w.outcome=on?on.dataset.k:w.outcome;const q=+$('weQ').value;if(q)w.queue=q;else delete w.queue;
+  const sid=$('weSp').value;if(sid)w.spotId=sid;else{delete w.spotId;w.noSpot=true;}
+  save();toast('保存しました');waitBack();
+}
+function waitDelAsk(id){
+  const linked=D.rides.find(r=>r.waitId===id);
+  sheet(`<div class="ttl">この待機の記録を削除しますか？</div><div class="sub" style="margin-top:6px">${linked?'この待機から乗せた乗車の記録は残ります（「流し」扱いになります）':'元に戻せません'}</div>
+  <div class="grid2" style="margin-top:14px"><button class="btn" onclick="waitEdit('${id}','${weBack}')">戻る</button><button class="btn r" onclick="waitDel('${id}')">削除</button></div>`);
+}
+function waitDel(id){D.rides.forEach(r=>{if(r.waitId===id){delete r.waitId;delete r.waitMs;if(r.kind==='wait')r.kind='nagashi';}});D.waits=D.waits.filter(w=>w.id!==id);save();toast('削除しました');waitBack();}
+function waitBack(){
+  if(weBack.startsWith('area:')){waitListArea(weBack.slice(5));return;}
+  if(weBack.startsWith('spot:')){spotDetail(weBack.slice(5),true);return;}
+  closeSheet();renderAll();
+}
+let waArea=null;
+function waitListArea(an){
+  waArea=an;const g=$('aGran').value,per=$('aPeriod').value,F=makeFilter(per,$('aDate').value,$('aDow').value);
+  const ws=D.waits.filter(w=>w.end&&F(w.shiftId,w.start)&&areaName(w.waitArea,g)===an).sort((a,b)=>b.start-a.start);
+  renderAna();
+  sheet(`<div class="ttl">${esc(an)} の待機</div><div class="sub" style="margin:4px 0 10px">タップで編集・削除できます</div>${ws.map(w=>`<div class="sub" style="margin-top:6px">${new Date(w.start).getMonth()+1}/${new Date(w.start).getDate()}（${'日月火水木金土'[new Date(w.start).getDay()]}）</div>`+waitCard(w,'area:'+an)).join('')||'<div class="sub">記録なし</div>'}
+  <button class="btn full" style="margin-top:10px" onclick="closeSheet()">閉じる</button>`);
+}
 /* ============ nav ============ */
 let view='home';
 function go(v){view=v;['home','spot','report','map','ana','set'].forEach(x=>$('v-'+x).classList.toggle('hide',x!==v));
