@@ -359,9 +359,35 @@ function vib(){try{navigator.vibrate&&navigator.vibrate(30);}catch(e){}}
 /* ============ data ============ */
 const KEY='taxilog-v1';
 let D={shifts:[],rides:[],waits:[],spots:[],spotEvents:[],state:{mode:'off'},settings:{goal:0,plan:0,rate:0,svc:'GO,スマハイ',pays:'現金,カード,QR,アプリ決済,チケット',wake:true,pickFee:500,dayGoal:0,shiftH:20,mapStyle:'std',dayGoals:{}},geo:{}};
-try{const j=JSON.parse(localStorage.getItem(KEY)||'null');if(j){Object.assign(D,j);D.settings=Object.assign({goal:0,plan:0,rate:0,svc:'GO,スマハイ',pays:'現金,カード,QR,アプリ決済,チケット',wake:true,pickFee:500,dayGoal:0,shiftH:20,mapStyle:'std',dayGoals:{}},j.settings||{});D.geo=j.geo||{};}}catch(e){}
-if(D.settings.svc==='GO,S.RIDE,Uber,DiDi,無線')D.settings.svc='GO,スマハイ';
-function save(){try{localStorage.setItem(KEY,JSON.stringify(D));}catch(e){toast('保存に失敗しました（容量不足？）');}}
+const DEF_SET={goal:0,plan:0,rate:0,svc:'GO,スマハイ',pays:'現金,カード,QR,アプリ決済,チケット',wake:true,pickFee:500,dayGoal:0,shiftH:20,mapStyle:'std',dayGoals:{}};
+function applyLoaded(j){if(!j)return;Object.assign(D,j);D.settings=Object.assign({},DEF_SET,j.settings||{});D.geo=j.geo||{};['shifts','rides','waits','spots','spotEvents'].forEach(k=>{if(!Array.isArray(D[k]))D[k]=[];});if(!D.state)D.state={mode:'off'};if(D.settings.svc==='GO,S.RIDE,Uber,DiDi,無線')D.settings.svc='GO,スマハイ';}
+let lsData=null;try{lsData=JSON.parse(localStorage.getItem(KEY)||'null');applyLoaded(lsData);}catch(e){}
+/* storage: IndexedDB (large) with localStorage fallback */
+let idb=null,useIDB=false,saveT=null,saveFailShown=false;
+function idbOpen(){return new Promise((ok,ng)=>{try{const r=indexedDB.open('taxilog',1);r.onupgradeneeded=()=>r.result.createObjectStore('kv');r.onsuccess=()=>ok(r.result);r.onerror=()=>ng(r.error);}catch(e){ng(e);}});}
+function idbGet(k){return new Promise((ok,ng)=>{const t=idb.transaction('kv','readonly').objectStore('kv').get(k);t.onsuccess=()=>ok(t.result);t.onerror=()=>ng(t.error);});}
+function idbPut(k,v){return new Promise((ok,ng)=>{const tx=idb.transaction('kv','readwrite');tx.objectStore('kv').put(v,k);tx.oncomplete=()=>ok();tx.onerror=()=>ng(tx.error);tx.onabort=()=>ng(tx.error);});}
+function saveFail(){if(!saveFailShown){saveFailShown=true;toast('保存に失敗しました（容量不足？）バックアップを取ってください');setTimeout(()=>saveFailShown=false,30000);}}
+function flushSave(){clearTimeout(saveT);saveT=null;
+  if(useIDB){idbPut('D',JSON.stringify(D)).catch(saveFail);return;}
+  try{localStorage.setItem(KEY,JSON.stringify(D));}catch(e){saveFail();}}
+function save(){if(useIDB){if(!saveT)saveT=setTimeout(flushSave,250);}else flushSave();}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&saveT)flushSave();});
+window.addEventListener('pagehide',()=>{if(saveT)flushSave();});
+async function initStorage(){
+  try{
+    if(!window.indexedDB)return;
+    idb=await idbOpen();
+    const raw=await idbGet('D');
+    if(raw){applyLoaded(JSON.parse(raw));useIDB=true;}
+    else{await idbPut('D',JSON.stringify(D));const back=await idbGet('D');if(!back)return;useIDB=true;}
+    // move off localStorage to free the 5MB area (keep only a marker)
+    try{localStorage.removeItem(KEY);localStorage.setItem(KEY+'-moved','1');}catch(e){}
+    try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist();}catch(e){}
+    Object.assign(mk,D.settings.mk||{});
+    lastActMode=null;renderAll();if(S().mode!=='off'){startWatch();wake(true);}
+  }catch(e){useIDB=false;}
+}
 const S=()=>D.state;
 const curShift=()=>D.shifts.find(s=>s.id===S().shiftId);
 const curRide=()=>D.rides.find(r=>r.id===S().rideId);
@@ -1005,7 +1031,7 @@ async function importBackup(j){if(!j.rides||!j.shifts)throw 0;
   j.shifts.forEach(s=>!sids.has(s.id)&&D.shifts.push(s));j.rides.forEach(r=>!ids.has(r.id)&&D.rides.push(r));(j.waits||[]).forEach(w=>!wids.has(w.id)&&D.waits.push(w));const spi=new Set((D.spots||[]).map(x=>x.id)),evi=new Set((D.spotEvents||[]).map(x=>x.id));D.spots=D.spots||[];D.spotEvents=D.spotEvents||[];(j.spots||[]).forEach(x=>!spi.has(x.id)&&D.spots.push(x));(j.spotEvents||[]).forEach(x=>!evi.has(x.id)&&D.spotEvents.push(x));Object.assign(D.geo,j.geo||{});
   D.shifts.sort((a,b)=>a.start-b.start);save();renderAll();toast('復元しました');}
 $('imFile').onchange=e=>importFile(e.target);
-$('wipe').onclick=()=>sheet(`<div class="ttl">全データを削除しますか？</div><div class="sub" style="margin-top:6px">元に戻せません。先にバックアップを。</div><div class="grid2" style="margin-top:14px"><button class="btn" onclick="closeSheet()">戻る</button><button class="btn r" onclick="localStorage.removeItem(KEY);location.reload()">削除</button></div>`);
+$('wipe').onclick=()=>sheet(`<div class="ttl">全データを削除しますか？</div><div class="sub" style="margin-top:6px">元に戻せません。先にバックアップを。</div><div class="grid2" style="margin-top:14px"><button class="btn" onclick="closeSheet()">戻る</button><button class="btn r" onclick="wipeAll()">削除</button></div>`);
 
 /* ============ spots (付け場) ============ */
 const SPOT_R=150;
@@ -1211,12 +1237,13 @@ function go(v){view=v;['home','spot','report','map','ana','set'].forEach(x=>$('v
 document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>go(b.dataset.go));
 $('shiftBtn').onclick=()=>S().mode==='off'?startShift():endShiftAsk();
 $('breakBtn').onclick=startBreak;
+async function wipeAll(){try{localStorage.removeItem(KEY);}catch(e){}try{if(idb)await idbPut('D',JSON.stringify({shifts:[],rides:[],waits:[],spots:[],spotEvents:[],state:{mode:'off'},settings:D.settings,geo:{}}));}catch(e){}location.reload();}
 function renderAll(){renderHome();if(view==='report')renderReport();if(view==='ana')renderAna();if(view==='map')drawMap();}
 
 /* ============ boot ============ */
 delete D.settings.hideFare;renderHome();setInterval(tick,1000);
 if(S().mode!=='off'){startWatch();wake(true);}
-backfillGeo();
+initStorage().then(backfillGeo);
 if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script>
 </body>
