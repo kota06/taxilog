@@ -178,7 +178,6 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
         <div><span class="k">拘束</span> <span class="v" id="mBind">00:00:00</span> <span class="k">休憩計</span> <span class="v" id="mBreak">0m</span></div>
         <div style="margin-top:4px"><span class="k">営収</span> <span class="v" id="mFare" style="font-size:20px">¥0</span> <span class="k">税抜</span> <span class="v" id="mEx" style="font-size:20px">¥0</span></div>
         <div style="margin-top:4px"><span class="k">時間営収</span> <span class="v" id="mHour">¥0/h</span></div>
-        <div style="margin-top:4px;font-size:13px"><span class="k" id="mPerL">今期</span> <span class="v" id="mPer" style="font-size:14px">¥0</span> <span class="k">税抜</span> <span class="v" id="mPerEx" style="font-size:14px">¥0</span></div>
       </div>
       <button class="btn y sm" id="breakBtn">☕ 休憩</button>
     </div>
@@ -198,7 +197,7 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
 
 <!-- ================= REPORT ================= -->
 <section id="v-report" class="hide">
-  <div class="card" id="rPeriod"></div>
+  <div class="card" id="rPeriod" style="padding:10px 12px"></div>
   <div class="card">
     <div class="row"><button class="btn sm" id="rPrev">◀</button><div class="sp" style="text-align:center;font-weight:800;font-size:17px" id="rMonth"></div><button class="btn sm" id="rNext">▶</button></div>
     <div class="cal" id="rCal"></div>
@@ -580,7 +579,6 @@ function renderHome(){
 }
 function tick(){
   const st=S(),m=st.mode,s=curShift(),t=now();
-  {const pr=periodOf(t),ps=periodStats(pr.y,pr.m);$('mPerL').textContent=(pr.m+1)+'月分('+md(ps.s)+'〜)';$('mPer').textContent=yen(ps.fare);$('mPerEx').textContent=yen(exTax(ps.fare));}
   {const on=rzOn(s),tot=rzTotal(s);$('rzBtn').classList.toggle('hide',!s);$('rzBtn').classList.toggle('on',on);$('rzLbl').textContent=on?'🔁 連続配車 ON':'連続配車 OFF';$('rzTime').textContent=s&&tot?'計 '+hms(tot):'';}
   const d=new Date();$('clock').textContent=pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
   if(s){const x=shiftStats(s);$('mBind').textContent=hms(x.bind);$('mBreak').textContent=dur(x.brk);$('mHour').textContent=x.bind-x.brk<900000?'計測中':yen(x.hour)+'/h';$('topFare').textContent=yen(x.fare);$('topCnt').textContent=x.cnt+'回';$('mFare').textContent=yen(x.fare);$('mEx').textContent=yen(exTax(x.fare));}
@@ -667,9 +665,10 @@ function renderReport(){
 let rPer=null;
 function renderPeriod(){
   const {y,m}=rPer,ps=periodStats(y,m),cd=closeDay();
-  $('rPeriod').innerHTML=`<div class="row"><button class="btn sm" onclick="rPer=periodShift(rPer,-1);renderPeriod()">◀</button><div class="sp" style="text-align:center"><div style="font-weight:800">${m+1}月分（${cd}日締め）</div><div class="sub">${md(ps.s)} 〜 ${md(ps.e-86400000)}</div></div><button class="btn sm" onclick="rPer=periodShift(rPer,1);renderPeriod()">▶</button></div>
-  <div class="tiles" style="margin-top:12px">${tile('営収合計（税込）',yen(ps.fare),'var(--green)')}${tile('税抜営収',yen(exTax(ps.fare)))}${tile('出番',ps.ss.length+'回')}${tile('乗車回数',ps.cnt+'回')}</div>
-  ${D.settings.rate?`<div class="sub" style="margin-top:8px;text-align:center">給与目安（税抜×${D.settings.rate}%）${yen(exTax(ps.fare)*D.settings.rate/100)}</div>`:''}`;
+  const sm=(l,v,c)=>`<div style="background:var(--card2);border-radius:10px;padding:6px 4px;text-align:center"><div style="font-size:10px;font-weight:700;color:var(--green)">${l}</div><div style="font-family:var(--mono);font-weight:800;font-size:14px;color:${c||'var(--ink)'};white-space:nowrap">${v}</div></div>`;
+  $('rPeriod').innerHTML=`<div class="row" style="gap:6px"><button class="btn sm" style="padding:4px 10px" onclick="rPer=periodShift(rPer,-1);renderPeriod()">◀</button><div class="sp" style="text-align:center;font-size:13px"><b>${m+1}月分</b>（${cd}日締め） <span class="sub">${md(ps.s)}〜${md(ps.e-86400000)}</span></div><button class="btn sm" style="padding:4px 10px" onclick="rPer=periodShift(rPer,1);renderPeriod()">▶</button></div>
+  <div style="display:grid;grid-template-columns:1.25fr 1.15fr .7fr .7fr;gap:6px;margin-top:8px">${sm('営収（税込）',yen(ps.fare),'var(--green)')}${sm('税抜',yen(exTax(ps.fare)))}${sm('出番',ps.ss.length)}${sm('回数',ps.cnt)}</div>
+  ${D.settings.rate?`<div class="sub" style="margin-top:6px;text-align:center;font-size:11px">給与目安（税抜×${D.settings.rate}%）${yen(exTax(ps.fare)*D.settings.rate/100)}</div>`:''}`;
 }
 function periodShift(p,k){let y=p.y,m=p.m+k;if(m<0){m=11;y--;}if(m>11){m=0;y++;}return {y,m};}
 const tile=(l,v,c)=>`<div class="tl left"><div class="l">${l}</div><div class="n" style="color:${c||'var(--ink)'}">${v}</div></div>`;
