@@ -470,9 +470,9 @@ function endBreak(silent){const s=curShift();const b=s&&s.breaks[s.breaks.length
 
 /* ============ fare sheet ============ */
 let fareBuf='',farePay='',fareRide=null,fareFee=0;
-let fareEd={};
+let fareEd={},fareMemo='';
 function fareSheet(r,isNew){
-  fareEd={};fareRide=r;fareBuf=r.fare?String(r.fare):'';fareFee=r.pickupFee??(r.kind==='app'?(+D.settings.pickFee||0):0);farePay=r.pay||(r.kind==='app'?'アプリ決済':'現金');
+  fareEd={};fareMemo=r.memo||'';fareRide=r;fareBuf=r.fare?String(r.fare):'';fareFee=r.pickupFee??(r.kind==='app'?(+D.settings.pickFee||0):0);farePay=r.pay||(r.kind==='app'?'アプリ決済':'現金');
   if(!payList().includes(farePay))farePay=payList()[0]||'';
   drawFare(isNew);
 }
@@ -483,6 +483,7 @@ function drawFare(isNew){
   <div class="fareIn" style="margin-top:10px;background:var(--card2);border-radius:12px">¥${fareBuf?(+fareBuf).toLocaleString():'0'}</div>
   <div class="keys">${[1,2,3,4,5,6,7,8,9,'00',0,'⌫'].map(k=>`<button onclick="fk('${k}')">${k}</button>`).join('')}</div>
   ${r.kind==='app'?`<div class="row" style="margin-top:10px"><span class="sub" style="white-space:nowrap">うち迎車料金 ¥</span><input type="number" inputmode="numeric" value="${fareFee}" oninput="fareFee=+this.value||0" style="padding:8px"></div>`:''}
+  <label>📝 メモ</label><textarea id="fareMemo" rows="2" placeholder="例 豊洲市場の帰り客・雨" oninput="fareMemo=this.value">${esc(fareMemo)}</textarea>
   ${isNew?'':`<label>種類</label><div class="sel chips" style="margin-top:0">${kinds.map(([k,l])=>`<button class="chip ${r.kind===k?'on':''}" onclick="fareRide.kind='${k}';drawFare(false)">${l}</button>`).join('')}</div>
   ${r.kind==='app'?`<div class="sel chips">${svcList().map(s=>`<button class="chip ${r.service===s?'on':''}" onclick="fareRide.service='${esc(s)}';drawFare(false)">${esc(s)}</button>`).join('')}</div>`:''}
   <label>時刻と場所</label>${pointRows(r)}`}
@@ -525,7 +526,7 @@ function saveFare(){
   if((c&&pk&&c>pk)||(pk&&dr&&pk>dr)){toast('時刻の順番がおかしいです（受信→乗車→降車）');return;}
   const moved=[];Object.entries(fareEd).forEach(([k,v])=>{if(v==null)return;r[k]=v;if(k.endsWith('Pos')){const b=k.slice(0,-3);delete r[b+'Area'];moved.push(b);}});
   fareEd={};moved.forEach(b=>queueGeo(r,b));
-  fareRide.fare=+fareBuf||0;fareRide.pay=farePay;fareRide.pickupFee=fareRide.kind==='app'?fareFee:0;delete fareRide._edit;save();closeSheet();renderAll();toast(fareRide.fare?yen(fareRide.fare)+' を記録':'保存しました');}
+  fareRide.fare=+fareBuf||0;fareRide.pay=farePay;{const mm=fareMemo.trim().slice(0,300);if(mm)fareRide.memo=mm;else delete fareRide.memo;}fareRide.pickupFee=fareRide.kind==='app'?fareFee:0;delete fareRide._edit;save();closeSheet();renderAll();toast(fareRide.fare?yen(fareRide.fare)+' を記録':'保存しました');}
 function editRide(id){const r=D.rides.find(x=>x.id===id);if(!r)return;r._edit=true;fareSheet(r,false);}
 function delRide(){const r=fareRide;sheet(`<div class="ttl">この乗車を削除しますか？</div><div class="grid2" style="margin-top:14px"><button class="btn" onclick="editRide('${r.id}')">戻る</button><button class="btn r" onclick="D.rides=D.rides.filter(x=>x.id!=='${r.id}');save();closeSheet();renderAll();">削除</button></div>`);}
 
@@ -660,7 +661,7 @@ function logCard(r){
   const fare=r.cancelled?'<span class="sub">-</span>':r.dropAt?(r.fare?yen(r.fare):'<span style="color:var(--red);font-size:13px">未入力</span>'):'<span class="sub">実車中</span>';
   const pm=r.callAt&&r.pickAt?'迎車'+mins(r.pickAt-r.callAt)+'分':'';
   const sub=[r.pickupFee?'迎車料金 '+yen(r.pickupFee):'',pm].filter(Boolean).join(' ・ ');
-  return `<div class="logc" onclick="editRide('${r.id}')"><div class="lt"><span class="tm">${hm(r.pickAt||r.callAt)}</span>${tag}${r.kind==='app'?`<span class="tag" style="background:#2a3140;color:#cfd6e4">${esc(r.service||'アプリ')}</span>`:''}<span class="fr">${fare}</span></div><div class="rt">${esc(from)}${to?' → '+esc(to):''}</div>${sub?`<div class="sub">${esc(sub)}</div>`:''}</div>`;
+  return `<div class="logc" onclick="editRide('${r.id}')"><div class="lt"><span class="tm">${hm(r.pickAt||r.callAt)}</span>${tag}${r.kind==='app'?`<span class="tag" style="background:#2a3140;color:#cfd6e4">${esc(r.service||'アプリ')}</span>`:''}<span class="fr">${fare}</span></div><div class="rt">${esc(from)}${to?' → '+esc(to):''}</div>${sub?`<div class="sub">${esc(sub)}</div>`:''}${r.memo?`<div style="font-size:13px;color:var(--yellow);margin-top:3px;white-space:pre-wrap">📝 ${esc(r.memo)}</div>`:''}</div>`;
 }
 function renderDay(){
   const box=$('rDay');
@@ -787,12 +788,13 @@ function drawLogAdd(){
   <div class="row"><div style="flex:1"><label>料金（総額）</label><input type="number" inputmode="numeric" id="laF" value="${la.fare||''}"></div><div style="flex:1"><label>乗車時間（分）</label><input type="number" inputmode="numeric" id="laM" value="${la.min||15}"></div></div>
   ${la.kind==='app'?`<div class="row"><div style="flex:1"><label>迎車料金</label><input type="number" inputmode="numeric" id="laP" value="${la.fee??D.settings.pickFee??0}"></div><div style="flex:1"><label>迎車時間（分）</label><input type="number" inputmode="numeric" id="laW" value="${la.wm||5}"></div></div>`:''}
   <div class="row"><div style="flex:1"><label>乗車場所</label><input id="laA" placeholder="例 中央区銀座" value="${esc(la.a||'')}"></div><div style="flex:1"><label>降車場所</label><input id="laB" placeholder="例 港区芝" value="${esc(la.b||'')}"></div></div>
+  <label>📝 メモ</label><textarea id="laMemo" rows="2">${esc(la.memo||'')}</textarea>
   <div class="grid2" style="margin-top:14px"><button class="btn" onclick="closeSheet()">キャンセル</button><button class="btn g" onclick="laSave()">追加</button></div>`);
 }
-function laSync(){la.t=fromIn($('laT').value)||la.t;la.fare=$('laF').value;la.min=$('laM').value;la.a=$('laA').value;la.b=$('laB').value;if($('laP')){la.fee=+$('laP').value||0;la.wm=$('laW').value;}}
+function laSync(){la.t=fromIn($('laT').value)||la.t;la.fare=$('laF').value;la.min=$('laM').value;la.a=$('laA').value;la.b=$('laB').value;la.memo=$('laMemo').value;if($('laP')){la.fee=+$('laP').value||0;la.wm=$('laW').value;}}
 function laSave(){
   laSync();const pick=la.t;
-  const r={id:uid(),shiftId:la.sid,kind:la.kind,service:la.kind==='app'?la.service:'',pickAt:pick,dropAt:pick+(+la.min||15)*60000,fare:+la.fare||0,pay:la.pay,manual:true};
+  const r={id:uid(),shiftId:la.sid,kind:la.kind,service:la.kind==='app'?la.service:'',pickAt:pick,dropAt:pick+(+la.min||15)*60000,fare:+la.fare||0,pay:la.pay,manual:true};if((la.memo||'').trim())r.memo=la.memo.trim().slice(0,300);
   if(la.kind==='app'){r.callAt=pick-(+la.wm||0)*60000;r.pickupFee=la.fee??(+D.settings.pickFee||0);}
   if(la.a.trim())r.pickArea={w:la.a.trim(),t:'-'};if(la.b.trim())r.dropArea={w:la.b.trim(),t:'-'};
   if(r.callAt&&r.pickArea)r.callArea=r.pickArea;
@@ -878,11 +880,12 @@ function drawMap(){
   const add=(p,color,html,t,hollow)=>{if(!p||!hOK(t))return;pts.push([p.lat,p.lng]);L.circleMarker([p.lat,p.lng],{radius:8,color:hollow?color:'#fff',weight:hollow?3:2,fillColor:color,fillOpacity:hollow?.15:.95}).bindPopup(html).addTo(layer);};
   D.rides.forEach(r=>{
     if(!F(r.shiftId,r.pickAt||r.callAt))return;
+    const ME=`${r.memo?`<div style="margin-top:4px;padding:4px 6px;background:#fff6cc;border-radius:6px;white-space:pre-wrap">📝 ${esc(r.memo)}</div>`:''}<div style="margin-top:6px"><a href="#" onclick="editRide('${r.id}');return false">${r.memo?'✏️ メモ・記録を編集':'📝 メモを書く'}</a></div>`;
     const fmin=+$('mFmin').value,fmax=+$('mFmax').value;if(fmin||fmax){if(r.cancelled||!r.fare)return;if(fmin&&r.fare<fmin)return;if(fmax&&r.fare>=fmax)return;}
     const f=r.fare?yen(r.fare):'';
-    if(mk.call&&r.kind==='app'&&r.callPos)add(r.callPos,C_CALL,`<b>${esc(r.service)} 受信</b> ${hm(r.callAt)}<br>${esc(areaName(r.callArea,'t'))}${r.cancelled?'<br>キャンセル':'<br>'+f}`,r.callAt,r.cancelled);
-    if(mk.pick&&r.pickPos&&!r.cancelled)add(r.pickPos,C_NAGASHI,`<b>${r.kind==='app'?esc(r.service||'アプリ'):r.kind==='wait'?'待機':'流し'} 乗車</b> ${hm(r.pickAt)}<br>${esc(areaName(r.pickArea,'t'))}<br>${f}${r.waitMs?'<br>待機 '+dur(r.waitMs):''}${r.callAt&&r.pickAt?'<br>迎車 '+mins(r.pickAt-r.callAt)+'分':''}`,r.pickAt);
-    if(mk.drop&&r.dropPos)add(r.dropPos,C_DROP,`<b>降車</b> ${hm(r.dropAt)}<br>${esc(areaName(r.dropArea,'t'))}<br>${f}`,r.dropAt);
+    if(mk.call&&r.kind==='app'&&r.callPos)add(r.callPos,C_CALL,`<b>${esc(r.service)} 受信</b> ${hm(r.callAt)}<br>${esc(areaName(r.callArea,'t'))}${r.cancelled?'<br>キャンセル':'<br>'+f}${ME}`,r.callAt,r.cancelled);
+    if(mk.pick&&r.pickPos&&!r.cancelled)add(r.pickPos,C_NAGASHI,`<b>${r.kind==='app'?esc(r.service||'アプリ'):r.kind==='wait'?'待機':'流し'} 乗車</b> ${hm(r.pickAt)}<br>${esc(areaName(r.pickArea,'t'))}<br>${f}${r.waitMs?'<br>待機 '+dur(r.waitMs):''}${r.callAt&&r.pickAt?'<br>迎車 '+mins(r.pickAt-r.callAt)+'分':''}${ME}`,r.pickAt);
+    if(mk.drop&&r.dropPos)add(r.dropPos,C_DROP,`<b>降車</b> ${hm(r.dropAt)}<br>${esc(areaName(r.dropArea,'t'))}<br>${f}${ME}`,r.dropAt);
   });
   if(mk.spot)(D.spots||[]).forEach(sp=>{const st=spotStats(sp);L.marker([sp.lat,sp.lng],{icon:spotIcon()}).bindPopup(`<b>${esc(sp.name)}</b><br>乗車${st.picks}回・平均${st.picks?yen(st.avg):'-'}<br>待機${st.waits}回${st.ok?'・平均'+mins(st.avgWait)+'分':''}<br><a href="#" onclick="spotDetail('${sp.id}');return false">詳細を見る</a>`).addTo(layer);});
   lastPts=pts;
