@@ -102,6 +102,7 @@ input,select,textarea{width:100%;font-size:16px;padding:10px;border:1px solid va
 .status.rz{border:2px solid #3a4252;color:var(--sub);font-size:14px;cursor:pointer}
 .status.rz.on{border-color:#6ea0ff;background:#16264d;color:#cfe0ff}
 .rzt{font-family:var(--mono);font-size:14px;color:#8fb2ff;margin-top:10px;font-weight:700}
+body.hidefare .money,body.hidefare .moneyArea .fr{filter:blur(9px);user-select:none}
 .split{display:grid;grid-template-columns:1fr 128px;gap:10px;align-items:stretch}
 .appcol{background:linear-gradient(160deg,#1e4fd0,#1a3fa8);border-radius:18px;padding:10px;display:flex;flex-direction:column;gap:8px}
 .apph{font-weight:800;font-size:14px;color:#fff}.apph small{display:block;font-weight:500;font-size:11px;opacity:.75}
@@ -157,7 +158,7 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
 <body>
 <div class="top">
   <div class="logo">Taxi<span>Log</span></div>
-  <div class="pill" id="topFare">¥0</div>
+  <div class="pill money" id="topFare">¥0</div>
   <div class="pill" id="topCnt">0回</div>
   <div class="clock" id="clock">--:--</div>
 </div>
@@ -172,12 +173,12 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
     </div>
     <div class="row" style="flex-wrap:wrap;gap:8px"><div class="status" id="statusPill"><i></i><span>未出庫</span></div>
     <button class="status rz" id="rzBtn" onclick="toggleRenzoku()"><span id="rzLbl">連続配車 OFF</span></button>
-    <span class="rzt" id="rzTime"></span></div>
+    <span class="rzt" id="rzTime"></span><span class="sp"></span><button class="status" id="eyeBtn" onclick="toggleHideFare()" style="border:2px solid #3a4252;font-size:14px;color:var(--ink)">🙈 隠す</button></div>
     <div class="meta" id="metaBox">
       <div style="flex:1">
         <div><span class="k">拘束</span> <span class="v" id="mBind">00:00:00</span> <span class="k">休憩計</span> <span class="v" id="mBreak">0m</span></div>
-        <div style="margin-top:4px"><span class="k">営収</span> <span class="v" id="mFare" style="font-size:20px">¥0</span> <span class="k">税抜</span> <span class="v" id="mEx" style="font-size:20px">¥0</span></div>
-        <div style="margin-top:4px"><span class="k">時間営収</span> <span class="v" id="mHour">¥0/h</span></div>
+        <div style="margin-top:4px"><span class="k">営収</span> <span class="v money" id="mFare" style="font-size:20px">¥0</span> <span class="k">税抜</span> <span class="v money" id="mEx" style="font-size:20px">¥0</span></div>
+        <div style="margin-top:4px"><span class="k">時間営収</span> <span class="v money" id="mHour">¥0/h</span></div>
       </div>
       <button class="btn y sm" id="breakBtn">☕ 休憩</button>
     </div>
@@ -191,7 +192,7 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
 
   <div class="card">
     <div class="row"><div class="ttl">今日の乗車</div><div class="sp"></div><button class="btn sm" data-go="report">日報 ›</button></div>
-    <div class="list" id="todayList"></div>
+    <div class="list moneyArea" id="todayList"></div>
   </div>
 </section>
 
@@ -1135,6 +1136,8 @@ $('spQ').oninput=renderSpots;
 $('spHour').onchange=e=>{spHour=+e.target.value;renderSpots();};
 (function(){$('spHour').innerHTML=Array.from({length:24},(_,h)=>`<option value="${h}" ${h===spHour?'selected':''}>${h}時台</option>`).join('');})();
 
+function applyHideFare(){const h=!!D.settings.hideFare;document.body.classList.toggle('hidefare',h);$('eyeBtn').textContent=h?'👁 表示':'🙈 隠す';}
+function toggleHideFare(){D.settings.hideFare=!D.settings.hideFare;save();applyHideFare();vib();}
 /* ============ wait edit ============ */
 const W_OUT={ride:['🟢 乗車','#0f3328','var(--green)'],app:['🔴 アプリ','#4a1518','#ff8f8f'],abandon:['⚪ 空振り','#2a3140','#aab2c2']};
 function waitPlace(w){const sp=w.spotId&&(D.spots||[]).find(x=>x.id===w.spotId);return sp?'📍'+sp.name:aName(w.waitArea,w.waitPos);}
@@ -1198,7 +1201,7 @@ $('breakBtn').onclick=startBreak;
 function renderAll(){renderHome();if(view==='report')renderReport();if(view==='ana')renderAna();if(view==='map')drawMap();}
 
 /* ============ boot ============ */
-renderHome();setInterval(tick,1000);
+renderHome();applyHideFare();setInterval(tick,1000);
 if(S().mode!=='off'){startWatch();wake(true);}
 backfillGeo();
 if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(()=>{});
