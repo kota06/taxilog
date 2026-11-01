@@ -102,7 +102,6 @@ input,select,textarea{width:100%;font-size:16px;padding:10px;border:1px solid va
 .status.rz{border:2px solid #3a4252;color:var(--sub);font-size:14px;cursor:pointer}
 .status.rz.on{border-color:#6ea0ff;background:#16264d;color:#cfe0ff}
 .rzt{font-family:var(--mono);font-size:14px;color:#8fb2ff;margin-top:10px;font-weight:700}
-body.hidefare .money,body.hidefare .moneyArea .fr{filter:blur(9px);user-select:none}
 .split{display:grid;grid-template-columns:1fr 128px;gap:10px;align-items:stretch}
 .appcol{background:linear-gradient(160deg,#1e4fd0,#1a3fa8);border-radius:18px;padding:10px;display:flex;flex-direction:column;gap:8px}
 .apph{font-weight:800;font-size:14px;color:#fff}.apph small{display:block;font-weight:500;font-size:11px;opacity:.75}
@@ -158,7 +157,7 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
 <body>
 <div class="top">
   <div class="logo">Taxi<span>Log</span></div>
-  <div class="pill money" id="topFare">¥0</div>
+  <div class="pill" id="topFare">¥0</div>
   <div class="pill" id="topCnt">0回</div>
   <div class="clock" id="clock">--:--</div>
 </div>
@@ -173,12 +172,13 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
     </div>
     <div class="row" style="flex-wrap:wrap;gap:8px"><div class="status" id="statusPill"><i></i><span>未出庫</span></div>
     <button class="status rz" id="rzBtn" onclick="toggleRenzoku()"><span id="rzLbl">連続配車 OFF</span></button>
-    <span class="rzt" id="rzTime"></span><span class="sp"></span><button class="status" id="eyeBtn" onclick="toggleHideFare()" style="border:2px solid #3a4252;font-size:14px;color:var(--ink)">🙈 隠す</button></div>
+    <span class="rzt" id="rzTime"></span></div>
     <div class="meta" id="metaBox">
       <div style="flex:1">
         <div><span class="k">拘束</span> <span class="v" id="mBind">00:00:00</span> <span class="k">休憩計</span> <span class="v" id="mBreak">0m</span></div>
-        <div style="margin-top:4px"><span class="k">営収</span> <span class="v money" id="mFare" style="font-size:20px">¥0</span> <span class="k">税抜</span> <span class="v money" id="mEx" style="font-size:20px">¥0</span></div>
-        <div style="margin-top:4px"><span class="k">時間営収</span> <span class="v money" id="mHour">¥0/h</span></div>
+        <div style="margin-top:4px"><span class="k">営収</span> <span class="v" id="mFare" style="font-size:20px">¥0</span> <span class="k">税抜</span> <span class="v" id="mEx" style="font-size:20px">¥0</span></div>
+        <div style="margin-top:4px"><span class="k">時間営収</span> <span class="v" id="mHour">¥0/h</span></div>
+        <div style="margin-top:4px;font-size:13px"><span class="k" id="mPerL">今期</span> <span class="v" id="mPer" style="font-size:14px">¥0</span> <span class="k">税抜</span> <span class="v" id="mPerEx" style="font-size:14px">¥0</span></div>
       </div>
       <button class="btn y sm" id="breakBtn">☕ 休憩</button>
     </div>
@@ -192,12 +192,13 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
 
   <div class="card">
     <div class="row"><div class="ttl">今日の乗車</div><div class="sp"></div><button class="btn sm" data-go="report">日報 ›</button></div>
-    <div class="list moneyArea" id="todayList"></div>
+    <div class="list" id="todayList"></div>
   </div>
 </section>
 
 <!-- ================= REPORT ================= -->
 <section id="v-report" class="hide">
+  <div class="card" id="rPeriod"></div>
   <div class="card">
     <div class="row"><button class="btn sm" id="rPrev">◀</button><div class="sp" style="text-align:center;font-weight:800;font-size:17px" id="rMonth"></div><button class="btn sm" id="rNext">▶</button></div>
     <div class="cal" id="rCal"></div>
@@ -298,6 +299,7 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
     <label>月間営収目標（円）</label><input id="sGoal" type="number" inputmode="numeric" placeholder="700000">
     <label>月の予定出番数</label><input id="sPlan" type="number" inputmode="numeric" placeholder="12">
     <label>歩合率（%・税抜営収に対して）</label><input id="sRate" type="number" inputmode="decimal" placeholder="60">
+    <label>締め日（毎月◯日締め）</label><input id="sClose" type="number" inputmode="numeric" placeholder="15" min="1" max="28">
     <label>1出番の目標営収（円・日報グラフ用）</label><input id="sDayGoal" type="number" inputmode="numeric" placeholder="50000">
     <label>1出番の予定拘束時間（時間・目標ペース線用）</label><input id="sShiftH" type="number" inputmode="decimal" placeholder="20">
     <label>迎車料金（標準・円）</label><input id="sFee" type="number" inputmode="numeric" placeholder="500">
@@ -345,6 +347,12 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const hm=t=>{const d=new Date(t);return pad(d.getHours())+':'+pad(d.getMinutes());};
 const dur=(ms,sec)=>{ms=Math.max(0,ms);const s=Math.floor(ms/1000),h=Math.floor(s/3600),m=Math.floor(s%3600/60);return sec?(h?pad(h)+':':'')+pad(m)+':'+pad(s%60):(h?h+'h':'')+m+'m';};
 const hms=ms=>{const s=Math.max(0,Math.floor(ms/1000));return pad(Math.floor(s/3600))+':'+pad(Math.floor(s%3600/60))+':'+pad(s%60);};
+const closeDay=()=>Math.min(28,Math.max(1,+D.settings.closeDay||15));
+// period that ends on closeDay of month (y,m): from (closeDay+1) of previous month
+function periodOf(t){const d=new Date(t),cd=closeDay();let y=d.getFullYear(),m=d.getMonth();if(d.getDate()>cd){m++;if(m>11){m=0;y++;}}return {y,m};}
+function periodRange(y,m){const cd=closeDay();return {s:new Date(y,m-1,cd+1).getTime(),e:new Date(y,m,cd+1).getTime()};}
+function periodStats(y,m){const {s,e}=periodRange(y,m);const ss=D.shifts.filter(x=>x.start>=s&&x.start<e),ids=new Set(ss.map(x=>x.id));let fare=0,cnt=0;D.rides.forEach(r=>{if(ids.has(r.shiftId)&&done(r)){fare+=r.fare||0;cnt++;}});return {ss,fare,cnt,s,e};}
+const md=t=>{const d=new Date(t);return (d.getMonth()+1)+'/'+d.getDate();};
 const exTax=v=>Math.floor((v||0)/1.1);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let tt;function toast(m){const t=$('toast');t.textContent=m;t.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('on'),1800);}
@@ -572,6 +580,7 @@ function renderHome(){
 }
 function tick(){
   const st=S(),m=st.mode,s=curShift(),t=now();
+  {const pr=periodOf(t),ps=periodStats(pr.y,pr.m);$('mPerL').textContent=(pr.m+1)+'月分('+md(ps.s)+'〜)';$('mPer').textContent=yen(ps.fare);$('mPerEx').textContent=yen(exTax(ps.fare));}
   {const on=rzOn(s),tot=rzTotal(s);$('rzBtn').classList.toggle('hide',!s);$('rzBtn').classList.toggle('on',on);$('rzLbl').textContent=on?'🔁 連続配車 ON':'連続配車 OFF';$('rzTime').textContent=s&&tot?'計 '+hms(tot):'';}
   const d=new Date();$('clock').textContent=pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
   if(s){const x=shiftStats(s);$('mBind').textContent=hms(x.bind);$('mBreak').textContent=dur(x.brk);$('mHour').textContent=x.bind-x.brk<900000?'計測中':yen(x.hour)+'/h';$('topFare').textContent=yen(x.fare);$('topCnt').textContent=x.cnt+'回';$('mFare').textContent=yen(x.fare);$('mEx').textContent=yen(exTax(x.fare));}
@@ -652,8 +661,17 @@ function renderReport(){
   $('rCal').innerHTML=h;
   const ms=D.shifts.filter(s=>dkey(s.start).startsWith(pre)),mst=dayStats(ms),g=+D.settings.goal||0;
   $('rMonthSum').innerHTML=`今月 ${ms.length}出番 ・ <b style="color:var(--green)">${yen(mst.fare)}</b>（税抜 ${yen(exTax(mst.fare))}）・ ${mst.cnt}回`+(g?` ・ 月目標の${Math.round(mst.fare/g*100)}%`:'')+(D.settings.rate?` ・ 給与目安 ${yen(mst.fare/1.1*D.settings.rate/100)}`:'');
+  {const pr=periodOf(rSel?new Date(rSel+'T12:00').getTime():new Date(y,m,closeDay()).getTime());rPer=pr;renderPeriod();}
   renderDay();
 }
+let rPer=null;
+function renderPeriod(){
+  const {y,m}=rPer,ps=periodStats(y,m),cd=closeDay();
+  $('rPeriod').innerHTML=`<div class="row"><button class="btn sm" onclick="rPer=periodShift(rPer,-1);renderPeriod()">◀</button><div class="sp" style="text-align:center"><div style="font-weight:800">${m+1}月分（${cd}日締め）</div><div class="sub">${md(ps.s)} 〜 ${md(ps.e-86400000)}</div></div><button class="btn sm" onclick="rPer=periodShift(rPer,1);renderPeriod()">▶</button></div>
+  <div class="tiles" style="margin-top:12px">${tile('営収合計（税込）',yen(ps.fare),'var(--green)')}${tile('税抜営収',yen(exTax(ps.fare)))}${tile('出番',ps.ss.length+'回')}${tile('乗車回数',ps.cnt+'回')}</div>
+  ${D.settings.rate?`<div class="sub" style="margin-top:8px;text-align:center">給与目安（税抜×${D.settings.rate}%）${yen(exTax(ps.fare)*D.settings.rate/100)}</div>`:''}`;
+}
+function periodShift(p,k){let y=p.y,m=p.m+k;if(m<0){m=11;y--;}if(m>11){m=0;y++;}return {y,m};}
 const tile=(l,v,c)=>`<div class="tl left"><div class="l">${l}</div><div class="n" style="color:${c||'var(--ink)'}">${v}</div></div>`;
 function logCard(r){
   const tag=r.cancelled?'<span class="tag t-cxl">キャンセル</span>':r.kind==='app'?'<span class="tag t-app">アプリ配車</span>':r.kind==='wait'?'<span class="tag t-wait">待機</span>':'<span class="tag t-nagashi">流し</span>';
@@ -949,8 +967,8 @@ function renderAna(){
 ['aMetric','aPeriod','aGran','aStep','aDow','aDate'].forEach(id=>$(id).onchange=renderAna);
 
 /* ============ settings ============ */
-function fillSet(){const s=D.settings;$('sGoal').value=s.goal||'';$('sPlan').value=s.plan||'';$('sRate').value=s.rate||'';$('sSvc').value=s.svc;$('sWake').checked=!!s.wake;$('sDayGoal').value=s.dayGoal||'';$('sShiftH').value=s.shiftH||'';$('sFee').value=s.pickFee??'';}
-$('sSave').onclick=()=>{Object.assign(D.settings,{goal:+$('sGoal').value||0,plan:+$('sPlan').value||0,rate:+$('sRate').value||0,svc:$('sSvc').value||'GO',wake:$('sWake').checked,dayGoal:+$('sDayGoal').value||0,shiftH:+$('sShiftH').value||20,pickFee:+$('sFee').value||0});save();lastActMode=null;toast('保存しました');};
+function fillSet(){const s=D.settings;$('sGoal').value=s.goal||'';$('sPlan').value=s.plan||'';$('sRate').value=s.rate||'';$('sSvc').value=s.svc;$('sWake').checked=!!s.wake;$('sDayGoal').value=s.dayGoal||'';$('sClose').value=s.closeDay||15;$('sShiftH').value=s.shiftH||'';$('sFee').value=s.pickFee??'';}
+$('sSave').onclick=()=>{Object.assign(D.settings,{goal:+$('sGoal').value||0,plan:+$('sPlan').value||0,rate:+$('sRate').value||0,svc:$('sSvc').value||'GO',wake:$('sWake').checked,dayGoal:+$('sDayGoal').value||0,closeDay:Math.min(28,Math.max(1,+$('sClose').value||15)),shiftH:+$('sShiftH').value||20,pickFee:+$('sFee').value||0});save();lastActMode=null;toast('保存しました');};
 function download(name,text,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500);}
 const stamp=()=>{const d=new Date();return d.getFullYear()+pad(d.getMonth()+1)+pad(d.getDate());};
 $('exJson').onclick=()=>download('taxilog-'+stamp()+'.json',JSON.stringify(D),'application/json');
@@ -1136,8 +1154,6 @@ $('spQ').oninput=renderSpots;
 $('spHour').onchange=e=>{spHour=+e.target.value;renderSpots();};
 (function(){$('spHour').innerHTML=Array.from({length:24},(_,h)=>`<option value="${h}" ${h===spHour?'selected':''}>${h}時台</option>`).join('');})();
 
-function applyHideFare(){const h=!!D.settings.hideFare;document.body.classList.toggle('hidefare',h);$('eyeBtn').textContent=h?'👁 表示':'🙈 隠す';}
-function toggleHideFare(){D.settings.hideFare=!D.settings.hideFare;save();applyHideFare();vib();}
 /* ============ wait edit ============ */
 const W_OUT={ride:['🟢 乗車','#0f3328','var(--green)'],app:['🔴 アプリ','#4a1518','#ff8f8f'],abandon:['⚪ 空振り','#2a3140','#aab2c2']};
 function waitPlace(w){const sp=w.spotId&&(D.spots||[]).find(x=>x.id===w.spotId);return sp?'📍'+sp.name:aName(w.waitArea,w.waitPos);}
@@ -1201,7 +1217,7 @@ $('breakBtn').onclick=startBreak;
 function renderAll(){renderHome();if(view==='report')renderReport();if(view==='ana')renderAna();if(view==='map')drawMap();}
 
 /* ============ boot ============ */
-renderHome();applyHideFare();setInterval(tick,1000);
+delete D.settings.hideFare;renderHome();setInterval(tick,1000);
 if(S().mode!=='off'){startWatch();wake(true);}
 backfillGeo();
 if('serviceWorker' in navigator&&location.protocol==='https:')navigator.serviceWorker.register('sw.js').catch(()=>{});
