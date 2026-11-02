@@ -350,7 +350,7 @@ const closeDay=()=>Math.min(28,Math.max(1,+D.settings.closeDay||15));
 // period that ends on closeDay of month (y,m): from (closeDay+1) of previous month
 function periodOf(t){const d=new Date(t),cd=closeDay();let y=d.getFullYear(),m=d.getMonth();if(d.getDate()>cd){m++;if(m>11){m=0;y++;}}return {y,m};}
 function periodRange(y,m){const cd=closeDay();return {s:new Date(y,m-1,cd+1).getTime(),e:new Date(y,m,cd+1).getTime()};}
-function periodStats(y,m){const {s,e}=periodRange(y,m);const ss=D.shifts.filter(x=>x.start>=s&&x.start<e),ids=new Set(ss.map(x=>x.id));let fare=0,cnt=0;D.rides.forEach(r=>{if(ids.has(r.shiftId)&&done(r)){fare+=r.fare||0;cnt++;}});return {ss,fare,cnt,s,e};}
+function periodStats(y,m){const {s,e}=periodRange(y,m);const ss=D.shifts.filter(x=>x.start>=s&&x.start<e),ids=new Set(ss.map(x=>x.id));let fare=0,cnt=0;D.rides.forEach(r=>{if(ids.has(r.shiftId)&&done(r)){fare+=r.fare||0;cnt++;}});ss.forEach(x=>fare+=x.adj||0);return {ss,fare,cnt,s,e};}
 const md=t=>{const d=new Date(t);return (d.getMonth()+1)+'/'+d.getDate();};
 const dhm=t=>{const d=new Date(t);return `${d.getMonth()+1}/${d.getDate()}(${'日月火水木金土'[d.getDay()]}) ${hm(t)}`;};
 const exTax=v=>Math.floor((v||0)/1.1);
@@ -609,7 +609,7 @@ function shiftStats(s){
   const brk=s.breaks.reduce((a,b)=>a+((b.e||now())-b.s),0);
   const rides=D.rides.filter(r=>r.shiftId===s.id);
   const dn=rides.filter(done);
-  const fare=dn.reduce((a,r)=>a+(r.fare||0),0);
+  const fare=dn.reduce((a,r)=>a+(r.fare||0),0)+(s.adj||0);
   const work=Math.max(1,end-s.start-brk);
   const apps=rides.filter(r=>r.kind==='app');
   return {bind:end-s.start,brk,fare,cnt:dn.length,hour:fare/(work/3600000),apps:apps.length,cxl:apps.filter(r=>r.cancelled).length,rides};
@@ -703,11 +703,11 @@ function dayStats(ss){
   const sum=k=>iv.filter(x=>x.k===k).reduce((a,x)=>a+x.e-x.s,0);
   const bind=ss.reduce((a,s)=>a+((s.end||t)-s.start),0);
   const ride=sum('ride'),pick=sum('pick'),wait=sum('wait'),brk=sum('brk');
-  const fare=dn.reduce((a,r)=>a+(r.fare||0),0);
+  const rideFare=dn.reduce((a,r)=>a+(r.fare||0),0),adj=ss.reduce((a,s)=>a+(s.adj||0),0),fare=rideFare+adj;
   const apps=rides.filter(r=>r.kind==='app'),appDone=apps.filter(done);
   const pickTimes=apps.filter(r=>r.pickAt&&r.callAt).map(r=>r.pickAt-r.callAt);
   const svc={};apps.forEach(r=>{const k=r.service||'アプリ';const o=svc[k]=svc[k]||{n:0,cx:0,pm:0,fee:0,fare:0};o.n++;if(r.cancelled)o.cx++;if(done(r)){o.fee+=r.pickupFee||0;o.fare+=r.fare||0;}if(r.pickAt&&r.callAt)o.pm+=r.pickAt-r.callAt;});
-  return {rides,dn,iv,bind,ride,pick,wait,brk,empty:Math.max(0,bind-ride-pick-wait-brk),fare,cnt:dn.length,max:dn.length?Math.max(...dn.map(r=>r.fare||0)):0,
+  return {rideFare,adj,rides,dn,iv,bind,ride,pick,wait,brk,empty:Math.max(0,bind-ride-pick-wait-brk),fare,cnt:dn.length,max:dn.length?Math.max(...dn.map(r=>r.fare||0)):0,
     work:bind-brk,apps,appDone,cx:apps.filter(r=>r.cancelled).length,pickTimes,appFare:appDone.reduce((a,r)=>a+(r.fare||0),0),fee:appDone.reduce((a,r)=>a+(r.pickupFee||0),0),svc};
 }
 function dayGoal(k){const s=D.settings;return (s.dayGoals&&s.dayGoals[k])||s.dayGoal||(s.goal&&s.plan?Math.round(s.goal/s.plan):0);}
@@ -731,7 +731,7 @@ function renderPeriod(){
   const {y,m}=rPer,ps=periodStats(y,m),cd=closeDay();
   const sm=(l,v,c)=>`<div style="background:var(--card2);border-radius:10px;padding:6px 4px;text-align:center"><div style="font-size:10px;font-weight:700;color:var(--green)">${l}</div><div style="font-family:var(--mono);font-weight:800;font-size:14px;color:${c||'var(--ink)'};white-space:nowrap">${v}</div></div>`;
   $('rPeriod').innerHTML=`<div class="row" style="gap:6px"><button class="btn sm" style="padding:4px 10px" onclick="rPer=periodShift(rPer,-1);renderPeriod()">◀</button><div class="sp" style="text-align:center;font-size:13px"><b>${m+1}月分</b>（${cd}日締め） <span class="sub">${md(ps.s)}〜${md(ps.e-86400000)}</span></div><button class="btn sm" style="padding:4px 10px" onclick="rPer=periodShift(rPer,1);renderPeriod()">▶</button></div>
-  <div style="display:grid;grid-template-columns:1.25fr 1.15fr .7fr .7fr;gap:6px;margin-top:8px">${sm('営収（税込）',yen(ps.fare),'var(--green)')}${sm('税抜',yen(exTax(ps.fare)))}${sm('出番',ps.ss.length)}${sm('回数',ps.cnt)}</div>
+  <div style="display:grid;grid-template-columns:1.2fr 1.3fr .6fr .6fr;gap:6px;margin-top:8px">${sm('税抜営収',yen(exTax(ps.fare)),'var(--green)')}${sm('1出番平均（税抜）',ps.ss.length?yen(exTax(ps.fare)/ps.ss.length):'-')}${sm('出番',ps.ss.length)}${sm('回数',ps.cnt)}</div>
   ${D.settings.rate?`<div class="sub" style="margin-top:6px;text-align:center;font-size:11px">給与目安（税抜×${D.settings.rate}%）${yen(exTax(ps.fare)*D.settings.rate/100)}</div>`:''}`;
 }
 function periodShift(p,k){let y=p.y,m=p.m+k;if(m<0){m=11;y--;}if(m>11){m=0;y++;}return {y,m};}
@@ -751,10 +751,10 @@ function renderDay(){
   const ss=shiftsOn(rSel),[y,mo,d]=rSel.split('-').map(Number);
   const title=`${mo}/${d}（${'日月火水木金土'[new Date(y,mo-1,d).getDay()]}）`;
   if(!ss.length){box.innerHTML=`<div class="card"><div class="ttl">${title}</div><div class="sub" style="margin:8px 0">この日の出番はありません</div><button class="btn g full" onclick="shiftEdit(null,'${rSel}')">＋ 出番を手入力で追加</button></div>`;return;}
-  const x=dayStats(ss),avg=x.cnt?x.fare/x.cnt:0,rate=x.bind?x.ride/x.bind:0,hourly=x.work>0?x.fare/(x.work/3600000):0;
+  const x=dayStats(ss),avg=x.cnt?x.rideFare/x.cnt:0,rate=x.bind?x.ride/x.bind:0,hourly=x.work>0?x.fare/(x.work/3600000):0;
   let h=`<div class="card"><div class="ttl">📊 ${title} サマリー</div>
   <div class="tiles" style="margin-top:12px">
-   <div class="tl"><div class="l">営収合計（税込）</div><div class="n" style="color:var(--green)">${yen(x.fare)}</div></div>
+   <div class="tl"><div class="l">営収合計（税込）</div><div class="n" style="color:var(--green)">${yen(x.fare)}</div>${x.adj?`<div class="sub" style="font-size:11px">うちまとめ入力 ${yen(x.adj)}</div>`:''}</div>
    <div class="tl"><div class="l">税抜営収</div><div class="n">${yen(exTax(x.fare))}</div></div>
    <div class="tl"><div class="l">乗車回数</div><div class="n">${x.cnt}<small style="font-size:13px;color:var(--green)">回</small></div></div>
    <div class="tl"><div class="l">平均単価</div><div class="n">${yen(avg)}</div></div>
@@ -766,6 +766,7 @@ function renderDay(){
    <div class="tl"><div class="l">稼働率（実車÷拘束）</div><div class="n" style="color:${rate<.35?'var(--red)':'var(--green)'}">${Math.round(rate*100)}%</div></div>
    <div class="tl"><div class="l">時間あたり営収</div><div class="n" style="color:var(--green)">${yen(hourly)}/h</div></div>
   </div>
+  ${ss.map(s=>`<button class="btn full" style="margin-top:10px;background:var(--green);color:#06281d" onclick="adjEdit('${s.id}')">💴 営収をまとめて入力${ss.length>1?'（'+hm(s.start)+'〜）':''}</button>`).join('')}
   ${ss.map(s=>`<button class="btn full" style="margin-top:10px;color:var(--yellow)" onclick="shiftEdit('${s.id}')">✏️ 出退勤・休憩を編集${ss.length>1?'（'+hm(s.start)+'〜）':''}</button>`).join('')}
   </div>`;
   if(x.apps.length){
@@ -832,6 +833,25 @@ function drawHours(ss,x){
     rows+=`<div class="hrow"><span class="h">${new Date(a).getHours()}時</span><div class="bar">${lead?`<i style="width:${lead/36000}%;background:transparent"></i>`:''}${['ride','pick','wait','brk'].map(k=>o[k]?`<i style="width:${o[k]/36000}%;background:${col[k]}"></i>`:'').join('')}<i style="width:${emp/36000}%;background:#7a2a2a"></i></div><span class="v" style="color:${sales?'var(--green)':'var(--sub)'}">${sales?yen(sales):'-'}<small style="color:var(--sub);font-weight:400">${rs.length?' '+rs.length+'回':''}</small></span></div>`;
   }
   $('hours').innerHTML=rows||'<div class="sub">データなし</div>';
+}
+/* lump-sum fare */
+function adjEdit(id){
+  const s=D.shifts.find(x=>x.id===id);if(!s)return;
+  const rec=D.rides.filter(r=>r.shiftId===id&&done(r)).reduce((a,r)=>a+(r.fare||0),0),cur=rec+(s.adj||0);
+  sheet(`<div class="ttl">営収をまとめて入力</div>
+  <div class="sub" style="margin-top:6px">忙しくて打ち込めなかった分をまとめて足します。乗車回数は変わりません。</div>
+  <div class="tiles" style="margin-top:12px">${tile('1件ずつ記録した合計',yen(rec))}${tile('今のまとめ入力',yen(s.adj||0),'var(--yellow)')}</div>
+  <label>この出番の営収合計（税込・メーターの日計など）</label>
+  <input id="adjTotal" type="number" inputmode="numeric" value="${cur||''}" placeholder="例 52000" style="font-size:22px;font-family:var(--mono);text-align:right" oninput="const v=+this.value||0;document.getElementById('adjDiff').textContent=v?'まとめ入力 '+(v-${rec}>=0?'+':'')+yen(v-${rec}):''">
+  <div id="adjDiff" style="margin-top:6px;font-weight:700;color:var(--yellow);text-align:right"></div>
+  <button class="btn g full" style="margin-top:14px" onclick="adjSave('${id}',${rec})">保存</button>
+  <div class="grid2" style="margin-top:8px"><button class="btn" onclick="closeSheet()">キャンセル</button><button class="btn r" onclick="adjSave('${id}',${rec},true)">まとめ入力を消す</button></div>`);
+  $('adjTotal').dispatchEvent(new Event('input'));
+}
+function adjSave(id,rec,clear){
+  const s=D.shifts.find(x=>x.id===id);if(!s)return;
+  if(clear){delete s.adj;}else{const v=+$('adjTotal').value||0;if(v&&v<rec){toast('1件ずつ記録した合計（'+yen(rec)+'）より少なくなっています');return;}if(!v||v===rec)delete s.adj;else s.adj=v-rec;}
+  save();closeSheet();renderAll();toast('保存しました');
 }
 /* shift edit */
 const toIn=t=>{const d=new Date(t);return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes());};
