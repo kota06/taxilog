@@ -236,7 +236,7 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
   </div>
   <div id="map"></div>
   <div class="sub" id="mapMsg" style="margin-top:6px"></div>
-  <div class="legend"><span><i style="background:#ff2d2d"></i>鳴った場所</span><span><i style="background:#2563eb"></i>乗車した場所</span><span><i style="background:#6b7280"></i>降車</span><span><i style="background:#16a34a;border-radius:2px;height:4px;width:14px"></i>迎車→乗車(点線)→降車</span><span><i style="border:2px solid #ff2d2d;width:7px;height:7px"></i>キャンセル</span></div>
+  <div class="legend"><span><i style="background:#ff2d2d"></i>鳴った場所</span><span><i style="background:#2563eb"></i>乗車した場所</span><span><i style="background:#6b7280"></i>降車</span><span><i style="background:#16a34a;border-radius:2px;height:4px;width:14px"></i>迎車→乗車(点線)→降車　※表示中の点だけを結ぶ</span><span><i style="border:2px solid #ff2d2d;width:7px;height:7px"></i>キャンセル</span></div>
 </section>
 
 <!-- ================= ANALYSIS ================= -->
@@ -967,9 +967,9 @@ function drawMap(){
     const f=r.fare?yen(r.fare):'';
     if(mk.line&&!r.cancelled&&r.pickPos&&hOK(r.pickAt||r.callAt)){
       const lp=`<b>${r.kind==='app'?esc(r.service||'アプリ'):r.kind==='wait'?'待機':'流し'}</b> ${hm(r.pickAt)}${r.dropAt?'→'+hm(r.dropAt):''}<br>${esc(areaName(r.pickArea,'t'))}${r.dropArea?' → '+esc(areaName(r.dropArea,'t')):''}<br>${f}${ME}`;
-      if(r.callPos)L.polyline([[r.callPos.lat,r.callPos.lng],[r.pickPos.lat,r.pickPos.lng]],{color:C_LINE,weight:3,opacity:.85,dashArray:'6 6'}).bindPopup(lp).addTo(layer);
-      if(r.dropPos)L.polyline([[r.pickPos.lat,r.pickPos.lng],[r.dropPos.lat,r.dropPos.lng]],{color:C_LINE,weight:4,opacity:.85}).bindPopup(lp).addTo(layer);
-      [r.callPos,r.pickPos,r.dropPos].forEach(q=>q&&pts.push([q.lat,q.lng]));
+      const seq=[['call',r.callPos],['pick',r.pickPos],['drop',r.dropPos]].filter(([k,q])=>q&&mk[k]&&(k!=='call'||r.kind==='app'));
+      for(let i=1;i<seq.length;i++){const [k0,a0]=seq[i-1],[,a1]=seq[i];L.polyline([[a0.lat,a0.lng],[a1.lat,a1.lng]],Object.assign({color:C_LINE,weight:2,opacity:.85},k0==='call'?{dashArray:'4 5'}:{})).bindPopup(lp).addTo(layer);}
+      seq.forEach(([,q])=>pts.push([q.lat,q.lng]));
     }
     if(mk.call&&r.kind==='app'&&r.callPos)add(r.callPos,C_CALL,`<b>${esc(r.service)} 受信</b> ${hm(r.callAt)}<br>${esc(areaName(r.callArea,'t'))}${r.cancelled?'<br>キャンセル':'<br>'+f}${ME}`,r.callAt,r.cancelled);
     if(mk.pick&&r.pickPos&&!r.cancelled)add(r.pickPos,C_NAGASHI,`<b>${r.kind==='app'?esc(r.service||'アプリ'):r.kind==='wait'?'待機':'流し'} 乗車</b> ${hm(r.pickAt)}<br>${esc(areaName(r.pickArea,'t'))}<br>${f}${r.waitMs?'<br>待機 '+dur(r.waitMs):''}${r.callAt&&r.pickAt?'<br>迎車 '+mins(r.pickAt-r.callAt)+'分':''}${ME}`,r.pickAt);
