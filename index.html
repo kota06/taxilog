@@ -258,7 +258,7 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
       <div style="flex:1"><label>集計</label><select id="aMetric"><option value="cnt">件数</option><option value="sum">売上合計</option><option value="avg">平均単価</option></select></div>
     </div>
     <div class="row">
-      <div style="flex:1"><label>エリア単位</label><select id="aGran"><option value="t">町名</option><option value="w">区・市</option></select></div>
+      <div style="flex:1"><label>エリア単位</label><select id="aGran"><option value="town">町名</option><option value="t">丁目まで</option><option value="w">区・市</option></select></div>
       <div style="flex:1"><label>時間の区切り</label><select id="aStep"><option value="1">1時間</option><option value="2">2時間</option><option value="3">3時間</option></select></div>
     </div>
     <div class="heat" id="aHeat" style="margin-top:12px"></div>
@@ -415,7 +415,7 @@ function capture(obj,key){getPos().then(p=>{if(!p)return;obj[key+'Pos']=p;save()
 
 /* ============ reverse geocode (Nominatim, ≤1req/s, cached) ============ */
 const gq=[];let gBusy=false;
-const gkey=p=>p.lat.toFixed(3)+','+p.lng.toFixed(3);
+const gkey=p=>'v2:'+p.lat.toFixed(3)+','+p.lng.toFixed(3);
 function queueGeo(obj,key){const p=obj[key+'Pos'];if(!p||obj[key+'Area'])return;const c=D.geo[gkey(p)];if(c){obj[key+'Area']=c;save();return;}gq.push([obj,key]);runGeo();}
 async function runGeo(){
   if(gBusy||!gq.length)return;gBusy=true;
@@ -426,10 +426,12 @@ async function runGeo(){
       const r=await fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=16&accept-language=ja&lat='+p.lat+'&lon='+p.lng);
       if(!r.ok)throw 0;const j=await r.json();const a=j.address||{};
       const w=a.city_district||a.city||a.town||a.village||a.county||'不明';
-      let t=a.quarter||a.suburb||a.neighbourhood||a.hamlet||'';
-      t=t.replace(/[一二三四五六七八九十〇0-9０-９]+丁目$/,'');
+      let t=a.quarter||a.suburb||a.neighbourhood||a.hamlet||'',c='';
+      const CH=/([一二三四五六七八九十〇0-9０-９]+丁目)$/;
+      let m=t.match(CH);if(m){c=m[1];t=t.slice(0,-c.length);}
+      if(!c)for(const f of [a.neighbourhood,a.city_block,a.block,a.residential]){if(f&&(m=String(f).match(CH))){c=m[1];break;}}
       if(w&&a.city&&a.city_district&&!w.startsWith(a.city))/* 例: 横浜市 中区 */;
-      const area={w:(a.city&&a.city_district?a.city+a.city_district:w),t:t||'-'};
+      const area={w:(a.city&&a.city_district?a.city+a.city_district:w),t:t||'-',c};
       D.geo[k]=area;obj[key+'Area']=area;save();
     }catch(e){gq.length=0;break;}
     await new Promise(r=>setTimeout(r,1100));
@@ -437,7 +439,7 @@ async function runGeo(){
   gBusy=false;renderHome();
 }
 function backfillGeo(){D.rides.forEach(r=>['call','pick','drop'].forEach(k=>queueGeo(r,k)));D.waits.forEach(w=>queueGeo(w,'wait'));}
-const areaName=(a,g)=>!a?'（住所取得中）':g==='w'?a.w:(a.t&&a.t!=='-'?a.w+' '+a.t:a.w);
+const areaName=(a,g)=>!a?'（住所取得中）':g==='w'?a.w:(a.t&&a.t!=='-'?a.w+' '+a.t+(g==='t'&&a.c?a.c:''):a.w);
 
 /* ============ wake lock ============ */
 let wl=null;
