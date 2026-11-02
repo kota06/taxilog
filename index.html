@@ -114,6 +114,7 @@ input,select,textarea{width:100%;font-size:16px;padding:10px;border:1px solid va
 .sideb.nag{background:linear-gradient(135deg,#ff8c00,#ff6a00);color:#2a1300}
 .sideb.wt{background:var(--green);color:#06281d}
 .sideb.br{background:transparent;border:2px solid #f5a524;color:#f5a524;min-height:70px;flex:.7}
+.sideb.bron{background:var(--yellow);color:#2a2100;min-height:70px;flex:.7}
 .sideb.gray{background:var(--gray);color:var(--ink)}
 .legend{display:flex;gap:12px;font-size:12px;color:var(--sub);margin-top:8px;flex-wrap:wrap}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:-1px}
@@ -467,18 +468,35 @@ function toggleRenzoku(){
 function endShift(){
   {const s0=curShift();if(rzOn(s0))s0.renzoku[s0.renzoku.length-1].e=now();}
   if(S().mode==='wait')stopWait('abandon');
-  if(S().mode==='break')endBreak(true);
+  if(brkOpen())endBreak(true);
   const s=curShift();if(s)s.end=now();
   D.state={mode:'off'};save();stopWatch();wake(false);closeSheet();renderHome();toast('お疲れさまでした');
 }
-function startWait(spotId){
-  const w={id:uid(),shiftId:S().shiftId,start:now(),end:null,outcome:null};if(spotId)w.spotId=spotId;D.waits.push(w);
-  capture(w,'wait');setMode('wait',{waitId:w.id});setTimeout(askQueue,250);
+function startWait(spotId,t0,noSpot){
+  const w={id:uid(),shiftId:S().shiftId,start:t0||now(),end:null,outcome:null};if(spotId)w.spotId=spotId;if(noSpot)w.noSpot=true;D.waits.push(w);
+  capture(w,'wait');setMode('wait',{waitId:w.id});if(t0)D.state.since=t0;setTimeout(askQueue,250);
+}
+const NEAR_R=500;let wtT0=0;
+function waitTap(){
+  const okM=()=>S().mode==='empty'||S().mode==='break';
+  if(!okM())return;
+  wtT0=now();
+  if(!(D.spots||[]).length){startWait(null,wtT0);return;}
+  const recent=lastFix&&now()-lastFix.t<120000?Promise.resolve({...lastFix}):(toast('📍 近くの付け場を確認中…'),getPos());
+  recent.then(p=>{
+    if(!okM())return;
+    const near=p?(D.spots||[]).map(s=>({s,d:distM(p,s)})).filter(x=>x.d<=NEAR_R).sort((a,b)=>a.d-b.d).slice(0,6):[];
+    if(!near.length){startWait(null,wtT0);toast(p?'近くに付け場なし・待機開始':'位置が取れないので付け場なしで待機開始');return;}
+    sheet(`<div class="ttl">どこで待機しますか？</div><div class="sub" style="margin:4px 0 10px">近くの付け場（${NEAR_R}m以内）・待機時間は ${hm(wtT0)} から計測</div>
+    ${near.map((x,i)=>{const st=spotStats(x.s);return `<button class="btn full" style="margin-bottom:8px;text-align:left;padding:14px;${i===0?'background:var(--green);color:#06281d':''}" onclick="closeSheet();startWait('${x.s.id}',wtT0)"><div class="row"><span style="font-size:20px">${SPOT_ICON[x.s.type]||'📍'}</span><b style="font-size:17px;flex:1">${esc(x.s.name)}</b><span style="font-size:13px;opacity:.8">${fmtDist(x.d)}</span></div>${st.ok?`<div style="font-size:12px;opacity:.8;margin-top:2px">平均待ち ${mins(st.avgWait)}分・乗れた率 ${Math.round(st.ok/st.waits*100)}%</div>`:''}</button>`;}).join('')}
+    <button class="btn full" style="margin-bottom:8px" onclick="closeSheet();startWait(null,wtT0,true)">付け場なしで待機</button>
+    <button class="btn full" style="background:transparent;border:1px solid var(--line)" onclick="closeSheet()">キャンセル（待機しない）</button>`);
+  });
 }
 function stopWait(outcome){const w=curWait();if(w){w.end=now();w.outcome=outcome;}D.state.waitId=null;}
-function cancelWait(){stopWait('abandon');setMode('empty',{emptySince:now()});}
+function cancelWait(){stopWait('abandon');if(brkOpen())setMode('break');else setMode('empty',{emptySince:now()});}
 function pickup(){
-  const m=S().mode;let r;
+  autoEndBreak();const m=S().mode;let r;
   if(m==='call'){r=curRide();r.pickAt=now();}
   else{
     r={id:uid(),shiftId:S().shiftId,kind:m==='wait'?'wait':'nagashi',service:'',pickAt:now(),emptyMs:now()-(S().emptySince||now())};
@@ -488,7 +506,7 @@ function pickup(){
   capture(r,'pick');setMode('ride',{rideId:r.id});toast('乗車を記録');
 }
 function appCall(svc){
-  const m=S().mode;
+  autoEndBreak();const m=S().mode;
   if(m==='wait')stopWait('app');
   const r={id:uid(),shiftId:S().shiftId,kind:'app',service:svc,callAt:now(),emptyMs:now()-(S().emptySince||now())};
   D.rides.push(r);capture(r,'call');setMode('call',{rideId:r.id});toast(svc+' 受信地点を記録');
@@ -498,8 +516,12 @@ function dropoff(){
   const r=curRide();if(!r)return;r.dropAt=now();capture(r,'drop');
   setMode('empty',{rideId:null,emptySince:now()});fareSheet(r,true);
 }
-function startBreak(){if(S().mode==='wait')stopWait('abandon');const s=curShift();s.breaks.push({s:now(),e:null});setMode('break');}
-function endBreak(silent){const s=curShift();const b=s&&s.breaks[s.breaks.length-1];if(b&&!b.e)b.e=now();if(!silent)setMode('empty',{emptySince:now()});}
+const brkOpen=()=>{const s=curShift(),b=s&&s.breaks[s.breaks.length-1];return !!(b&&!b.e);};
+function startBreak(){const s=curShift();if(!s||brkOpen())return;s.breaks.push({s:now(),e:null});
+  if(S().mode==='wait'){save();vib();lastActMode=null;renderHome();toast('待機したまま休憩中');}else setMode('break');}
+function endBreak(silent){const s=curShift();const b=s&&s.breaks[s.breaks.length-1];if(b&&!b.e)b.e=now();
+  if(silent)return;if(S().mode==='break')setMode('empty',{emptySince:now()});else{save();vib();lastActMode=null;renderHome();toast('休憩終了（待機は継続）');}}
+function autoEndBreak(){if(brkOpen()){endBreak(true);toast('休憩を自動で終了しました');}}
 
 /* ============ fare sheet ============ */
 let fareBuf='',farePay='',fareRide=null,fareFee=0;
@@ -585,11 +607,11 @@ function actionsHTML(m){
   if(m==='off')return `<button class="big full" style="background:var(--green);color:#06281d;width:100%;border:0" onclick="startShift()"><span class="ic">🔑</span>出庫する<small>位置情報の許可が出たら「許可」</small></button>`;
   const appCol=`<div class="appcol"><div class="apph">📶 アプリ・無線<small>鳴ったらタップ</small></div>${svcList().map((v,i)=>`<button class="appb ${i===0?'first':''}" onclick="appCall('${esc(v)}')">${esc(v)}</button>`).join('')}</div>`;
   const side=(btns)=>`<div class="sidecol">${btns.map(([cls,ic,l,sub,fn])=>`<button class="sideb ${cls}" onclick="${fn}"><span class="ic">${ic}</span><b>${l}</b><small>${sub}</small></button>`).join('')}</div>`;
-  if(m==='empty')return `<div class="split">${appCol}${side([['nag','🚕','流し','乗車時にタップ','pickup()'],['wt','▶','待機','現在地を記録','startWait()'],['br','☕','休憩','','startBreak()']])}</div>`;
-  if(m==='wait')return `<div class="split">${appCol}${side([['nag','🚕','乗車','待機から乗車','pickup()'],['gray','■','待機やめる','乗せずに移動','cancelWait()'],['br','☕','休憩','','startBreak()']])}</div>`;
+  if(m==='empty')return `<div class="split">${appCol}${side([['nag','🚕','流し','乗車時にタップ','pickup()'],['wt','▶','待機','近くの付け場を選択','waitTap()'],['br','☕','休憩','','startBreak()']])}</div>`;
+  if(m==='wait')return `<div class="split">${appCol}${side([['nag','🚕','乗車','待機から乗車','pickup()'],['gray','■','待機やめる','乗せずに移動','cancelWait()'],brkOpen()?['bron','☕','休憩終了','待機は続く','endBreak()']:['br','☕','休憩','待機したまま','startBreak()']])}</div>`;
   if(m==='call')return `<div class="grid2"><button class="big" style="background:var(--gray);color:var(--ink)" onclick="cancelCall()"><span class="ic">✕</span>キャンセル<small>乗車なし</small></button><button class="big" style="background:linear-gradient(135deg,#ff8c00,#ff6a00);color:#2a1300" onclick="pickup()"><span class="ic">🙋</span>乗車<small>お客様が乗ったら</small></button></div>`;
   if(m==='ride')return `<button class="big" style="background:var(--green);color:#06281d;width:100%" onclick="dropoff()"><span class="ic">🏁</span>降車・料金入力<small>降車地点を記録</small></button>`;
-  if(m==='break')return `<button class="big" style="background:var(--yellow);color:#2a2100;width:100%" onclick="endBreak()"><span class="ic">☕</span>休憩終了</button>`;
+  if(m==='break')return `<div class="grid2"><button class="big" style="background:var(--yellow);color:#2a2100" onclick="endBreak()"><span class="ic">☕</span>休憩終了</button><button class="big" style="background:var(--green);color:#06281d" onclick="waitTap()"><span class="ic">▶</span>待機も開始<small>休憩しながら並ぶ</small></button></div>`;
   return '';
 }
 let lastActMode=null;
@@ -599,7 +621,8 @@ function renderHome(){
   $('statusPill').innerHTML=`<i style="background:${col}"></i><span style="color:${col}">${lbl}</span>`;
   $('shiftBtn').textContent=m==='off'?'🔑 出庫する':'🏠 入庫 ››';
   $('breakBtn').classList.add('hide');
-  if(lastActMode!==m||$('actions').dataset.svc!==D.settings.svc){$('actions').innerHTML=actionsHTML(m);$('actions').dataset.svc=D.settings.svc;lastActMode=m;}
+  const amKey=m+(brkOpen()?'b':'');
+  if(lastActMode!==amKey||$('actions').dataset.svc!==D.settings.svc){$('actions').innerHTML=actionsHTML(m);$('actions').dataset.svc=D.settings.svc;lastActMode=amKey;}
   tick();renderToday();
 }
 function tick(){
@@ -611,7 +634,7 @@ function tick(){
   const T=$('tVal'),L=$('tLabel'),Sb=$('tSub');T.className='timer';
   if(m==='off'){L.textContent='空車時間';T.textContent='00:00';Sb.textContent='「出庫する」を押して開始';}
   else if(m==='empty'){L.textContent='空車時間';T.textContent=dur(t-(st.emptySince||t),true);Sb.textContent='待機・流し・アプリ配車をタップ';}
-  else if(m==='wait'){const w=curWait();if(w&&!w.spotId&&!w.noSpot&&w.waitPos){const ns=nearestSpot(w.waitPos);if(ns){w.spotId=ns.id;save();}}const sp=w&&w.spotId&&(D.spots||[]).find(x=>x.id===w.spotId);L.textContent='待機時間';T.textContent=dur(t-(w?w.start:t),true);const q=w&&w.queue?' ・ 🚕'+w.queue+'台目':' ・ 台数を入力';if(sp){const st=spotStats(sp);Sb.textContent='📍 '+sp.name+q+(st.ok?'（平均'+mins(st.avgWait)+'分）':'');}else Sb.textContent=(w&&w.waitArea?'📍 '+areaName(w.waitArea,'t'):'📍 位置を取得中…')+q;}
+  else if(m==='wait'){const w=curWait();if(w&&!w.spotId&&!w.noSpot&&w.waitPos){const ns=nearestSpot(w.waitPos);if(ns){w.spotId=ns.id;save();}}const sp=w&&w.spotId&&(D.spots||[]).find(x=>x.id===w.spotId);L.textContent=brkOpen()?'待機時間（☕休憩中）':'待機時間';T.textContent=dur(t-(w?w.start:t),true);const q=w&&w.queue?' ・ 🚕'+w.queue+'台目':' ・ 台数を入力';if(sp){const st=spotStats(sp);Sb.textContent='📍 '+sp.name+q+(st.ok?'（平均'+mins(st.avgWait)+'分）':'');}else Sb.textContent=(w&&w.waitArea?'📍 '+areaName(w.waitArea,'t'):'📍 位置を取得中…')+q;}
   else if(m==='call'){const r=curRide();T.className='timer b';L.textContent='迎車 '+(r?r.service:'');T.textContent=dur(t-(r?r.callAt:t),true);Sb.textContent=r&&r.callArea?'📶 受信: '+areaName(r.callArea,'t'):'📶 受信地点を取得中…';}
   else if(m==='ride'){const r=curRide();T.className='timer o';L.textContent='実車時間';T.textContent=dur(t-(r?r.pickAt:t),true);Sb.textContent=r&&r.pickArea?'🚕 乗車: '+areaName(r.pickArea,'t'):'🚕 乗車地点を取得中…';}
   else if(m==='break'){const b=s&&s.breaks[s.breaks.length-1];T.className='timer y';L.textContent='休憩中';T.textContent=dur(t-(b?b.s:t),true);Sb.textContent='';}
@@ -651,7 +674,10 @@ function intervals(ss){
     if(r.kind==='app'&&r.callAt){const e=r.pickAt||r.cancelAt||(S().rideId===r.id?t:r.callAt);if(e>r.callAt)out.push({k:'pick',s:r.callAt,e});}
     if(r.pickAt&&!r.cancelled){const e=r.dropAt||(S().rideId===r.id?t:r.pickAt);if(e>r.pickAt)out.push({k:'ride',s:r.pickAt,e});}
   });
-  D.waits.filter(w=>ids.has(w.shiftId)).forEach(w=>{const e=w.end||(S().waitId===w.id?t:w.start);if(e>w.start)out.push({k:'wait',s:w.start,e});});
+  const brks=[];ss.forEach(s=>s.breaks.forEach(b=>brks.push([b.s,b.e||t])));
+  D.waits.filter(w=>ids.has(w.shiftId)).forEach(w=>{const e=w.end||(S().waitId===w.id?t:w.start);if(e<=w.start)return;
+    let segs=[[w.start,e]];brks.forEach(([bs,be])=>{segs=segs.flatMap(([a,c])=>be<=a||bs>=c?[[a,c]]:[[a,Math.max(a,bs)],[Math.min(c,be),c]].filter(([x,y])=>y>x));});
+    segs.forEach(([a,c])=>out.push({k:'wait',s:a,e:c}));});
   ss.forEach(s=>s.breaks.forEach(b=>{const e=b.e||t;if(e>b.s)out.push({k:'brk',s:b.s,e});}));
   return out;
 }
