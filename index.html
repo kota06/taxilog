@@ -236,7 +236,7 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
   </div>
   <div id="map"></div>
   <div class="sub" id="mapMsg" style="margin-top:6px"></div>
-  <div class="legend"><span><i style="background:#ff2d2d"></i>鳴った場所</span><span><i style="background:#2563eb"></i>乗車した場所</span><span><i style="background:#6b7280"></i>降車</span><span><i style="border:2px solid #ff2d2d;width:7px;height:7px"></i>キャンセル</span></div>
+  <div class="legend"><span><i style="background:#ff2d2d"></i>鳴った場所</span><span><i style="background:#2563eb"></i>乗車した場所</span><span><i style="background:#6b7280"></i>降車</span><span><i style="background:#16a34a;border-radius:2px;height:4px;width:14px"></i>迎車→乗車(点線)→降車</span><span><i style="border:2px solid #ff2d2d;width:7px;height:7px"></i>キャンセル</span></div>
 </section>
 
 <!-- ================= ANALYSIS ================= -->
@@ -897,8 +897,8 @@ function makeFilter(per,date,dow){
     if(dow!=='all'&&new Date(st).getDay()!==+dow)return false;
     return true;};
 }
-const C_CALL='#ff2d2d',C_NAGASHI='#2563eb',C_WAIT='#16a34a',C_DROP='#6b7280';
-let map=null,layer=null,mapFocus=null;const mk=Object.assign({call:true,pick:true,drop:false,spot:true},D.settings.mk||{});
+const C_LINE='#16a34a',C_CALL='#ff2d2d',C_NAGASHI='#2563eb',C_WAIT='#16a34a',C_DROP='#6b7280';
+let map=null,layer=null,mapFocus=null;const mk=Object.assign({call:true,pick:true,drop:false,spot:true,line:false},D.settings.mk||{});
 function inPeriod(t,days){if(!days)return true;if(days==1){const s=curShift()||D.shifts[D.shifts.length-1];return s&&t>=s.start&&(!s.end||t<=s.end);}return t>=now()-days*86400000;}
 const LF_CDN=['https://unpkg.com/leaflet@1.9.4/dist/','https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/','https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/'];
 function loadTag(tag,attrs){return new Promise((ok,ng)=>{const el=document.createElement(tag);Object.assign(el,attrs);el.onload=ok;el.onerror=ng;document.head.appendChild(el);setTimeout(ng,10000);});}
@@ -953,7 +953,7 @@ function applyMapStyle(){
 }
 function renderMapCtl(){
   const st='osm';
-  $('mKinds').innerHTML=[['call','🔴 鳴った場所'],['pick','🔵 乗車'],['drop','⚪ 降車'],['spot','🟡 付け場']].map(([k,l])=>`<button class="chip ${mk[k]?'on':''}" onclick="mk['${k}']=!mk['${k}'];D.settings.mk={...mk};save();renderMapCtl();drawMap()">${l}</button>`).join('');
+  $('mKinds').innerHTML=[['call','🔴 鳴った場所'],['pick','🔵 乗車'],['drop','⚪ 降車'],['line','🟢 線'],['spot','🟡 付け場']].map(([k,l])=>`<button class="chip ${mk[k]?'on':''}" onclick="mk['${k}']=!mk['${k}'];D.settings.mk={...mk};save();renderMapCtl();drawMap()">${l}</button>`).join('');
 }
 function drawMap(){
   if(!map)return;layer.clearLayers();
@@ -965,6 +965,12 @@ function drawMap(){
     const ME=`${r.memo?`<div style="margin-top:4px;padding:4px 6px;background:#fff6cc;border-radius:6px;white-space:pre-wrap">📝 ${esc(r.memo)}</div>`:''}<div style="margin-top:6px"><a href="#" onclick="editRide('${r.id}');return false">${r.memo?'✏️ メモ・記録を編集':'📝 メモを書く'}</a></div>`;
     const fmin=+$('mFmin').value,fmax=+$('mFmax').value;if(fmin||fmax){if(r.cancelled||!r.fare)return;if(fmin&&r.fare<fmin)return;if(fmax&&r.fare>=fmax)return;}
     const f=r.fare?yen(r.fare):'';
+    if(mk.line&&!r.cancelled&&r.pickPos&&hOK(r.pickAt||r.callAt)){
+      const lp=`<b>${r.kind==='app'?esc(r.service||'アプリ'):r.kind==='wait'?'待機':'流し'}</b> ${hm(r.pickAt)}${r.dropAt?'→'+hm(r.dropAt):''}<br>${esc(areaName(r.pickArea,'t'))}${r.dropArea?' → '+esc(areaName(r.dropArea,'t')):''}<br>${f}${ME}`;
+      if(r.callPos)L.polyline([[r.callPos.lat,r.callPos.lng],[r.pickPos.lat,r.pickPos.lng]],{color:C_LINE,weight:3,opacity:.85,dashArray:'6 6'}).bindPopup(lp).addTo(layer);
+      if(r.dropPos)L.polyline([[r.pickPos.lat,r.pickPos.lng],[r.dropPos.lat,r.dropPos.lng]],{color:C_LINE,weight:4,opacity:.85}).bindPopup(lp).addTo(layer);
+      [r.callPos,r.pickPos,r.dropPos].forEach(q=>q&&pts.push([q.lat,q.lng]));
+    }
     if(mk.call&&r.kind==='app'&&r.callPos)add(r.callPos,C_CALL,`<b>${esc(r.service)} 受信</b> ${hm(r.callAt)}<br>${esc(areaName(r.callArea,'t'))}${r.cancelled?'<br>キャンセル':'<br>'+f}${ME}`,r.callAt,r.cancelled);
     if(mk.pick&&r.pickPos&&!r.cancelled)add(r.pickPos,C_NAGASHI,`<b>${r.kind==='app'?esc(r.service||'アプリ'):r.kind==='wait'?'待機':'流し'} 乗車</b> ${hm(r.pickAt)}<br>${esc(areaName(r.pickArea,'t'))}<br>${f}${r.waitMs?'<br>待機 '+dur(r.waitMs):''}${r.callAt&&r.pickAt?'<br>迎車 '+mins(r.pickAt-r.callAt)+'分':''}${ME}`,r.pickAt);
     if(mk.drop&&r.dropPos)add(r.dropPos,C_DROP,`<b>降車</b> ${hm(r.dropAt)}<br>${esc(areaName(r.dropArea,'t'))}<br>${f}${ME}`,r.dropAt);
