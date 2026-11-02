@@ -176,7 +176,7 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
     <span class="rzt" id="rzTime"></span></div>
     <div class="meta" id="metaBox">
       <div style="flex:1">
-        <div><span class="k">拘束</span> <span class="v" id="mBind">00:00:00</span> <span class="k">休憩計</span> <span class="v" id="mBreak">0m</span></div>
+        <div><span class="k">拘束</span> <span class="v" id="mBind">00:00:00</span> <span onclick="if(curShift())shiftEdit(curShift().id)" style="cursor:pointer;border-bottom:1px dashed #f5a524;padding-bottom:1px"><span class="k">休憩計</span> <span class="v" id="mBreak">0m</span> <span style="font-size:12px">✏️</span></span></div>
         <div style="margin-top:4px"><span class="k">営収</span> <span class="v" id="mFare" style="font-size:20px">¥0</span> <span class="k">税抜</span> <span class="v" id="mEx" style="font-size:20px">¥0</span></div>
         <div style="margin-top:4px"><span class="k">時間営収</span> <span class="v" id="mHour">¥0/h</span></div>
       </div>
@@ -465,6 +465,18 @@ function toggleRenzoku(){
   else{s.renzoku.push({s:now(),e:null});toast('連続配車をONにしました');}
   save();vib();tick();
 }
+const AUTO_END_H=24;
+function autoEndCheck(){
+  const s=curShift();if(!s||S().mode==='off')return false;
+  const lim=s.start+AUTO_END_H*3600000;if(now()<lim)return false;
+  s.breaks.forEach(b=>{if(!b.e||b.e>lim)b.e=lim;});
+  (s.renzoku||[]).forEach(r=>{if(!r.e||r.e>lim)r.e=lim;});
+  const w=curWait();if(w&&!w.end){w.end=Math.max(w.start,lim);w.outcome='abandon';}
+  const r=curRide();if(r){if(r.pickAt&&!r.dropAt){r.dropAt=Math.max(r.pickAt,lim);}else if(!r.pickAt&&!r.cancelled){r.cancelled=true;r.cancelAt=lim;}}
+  s.end=lim;s.autoEnd=true;D.state={mode:'off'};save();stopWatch();wake(false);lastActMode=null;renderHome();
+  sheet(`<div class="ttl">自動で入庫しました</div><div class="sub" style="margin-top:6px">出庫から${AUTO_END_H}時間たったため、${new Date(lim).getMonth()+1}/${new Date(lim).getDate()} ${hm(lim)} で入庫として記録しました。</div><div class="sub" style="margin-top:4px">入庫時刻は日報の「出退勤・休憩を編集」で直せます。${r&&r.pickAt&&!r.fare?'<br>実車中だった乗車は、日報で料金を入れてください。':''}</div><button class="btn g full" style="margin-top:14px" onclick="closeSheet()">OK</button>`);
+  return true;
+}
 function endShift(){
   {const s0=curShift();if(rzOn(s0))s0.renzoku[s0.renzoku.length-1].e=now();}
   if(S().mode==='wait')stopWait('abandon');
@@ -626,6 +638,7 @@ function renderHome(){
   tick();renderToday();
 }
 function tick(){
+  if(autoEndCheck())return;
   const st=S(),m=st.mode,s=curShift(),t=now();
   {const on=rzOn(s),tot=rzTotal(s);$('rzBtn').classList.toggle('hide',!s);$('rzBtn').classList.toggle('on',on);$('rzLbl').textContent=on?'🔁 連続配車 ON':'連続配車 OFF';$('rzTime').textContent=s&&tot?'計 '+hms(tot):'';}
   const d=new Date();$('clock').textContent=pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
@@ -833,8 +846,8 @@ function drawShiftEdit(){
   sheet(`<div class="ttl">${e.id?'出退勤・休憩を編集':'出番を追加'}</div>
   <label>出庫</label><input type="datetime-local" id="seS" value="${toIn(e.start)}">
   <label>入庫${live?'（出庫中のため入庫ボタンで記録）':''}</label><input type="datetime-local" id="seE" value="${e.end?toIn(e.end):''}" ${live?'disabled':''}>
-  <label>休憩</label>${e.breaks.map((b,i)=>`<div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;margin-bottom:8px;background:var(--card2);padding:8px;border-radius:10px"><div><input type="datetime-local" id="bs${i}" value="${toIn(b.s)}" style="margin-bottom:4px"><input type="datetime-local" id="be${i}" value="${b.e?toIn(b.e):''}"></div><button class="btn r sm" onclick="seSync();edShift.breaks.splice(${i},1);drawShiftEdit()">削除</button></div>`).join('')||'<div class="sub" style="margin-bottom:8px">休憩なし</div>'}
-  <button class="btn sm" onclick="seSync();const t=edShift.start+4*3600000;edShift.breaks.push({s:t,e:t+30*60000});drawShiftEdit()">＋ 休憩を追加</button>
+  <label>休憩 <span class="sub">（終了を空欄にすると休憩中のまま）</span></label>${e.breaks.map((b,i)=>`<div style="display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;margin-bottom:8px;background:var(--card2);padding:8px;border-radius:10px"><div><input type="datetime-local" id="bs${i}" value="${toIn(b.s)}" style="margin-bottom:4px"><input type="datetime-local" id="be${i}" value="${b.e?toIn(b.e):''}"></div><button class="btn r sm" onclick="seSync();edShift.breaks.splice(${i},1);drawShiftEdit()">削除</button></div>`).join('')||'<div class="sub" style="margin-bottom:8px">休憩なし</div>'}
+  <button class="btn sm" onclick="seSync();const live=edShift.id&&S().shiftId===edShift.id,t=live?now()-30*60000:edShift.start+4*3600000;edShift.breaks.push({s:t,e:t+30*60000});drawShiftEdit()">＋ 休憩を追加</button>
   <div class="grid2" style="margin-top:14px"><button class="btn" onclick="closeSheet()">キャンセル</button><button class="btn g" onclick="seSave()">保存</button></div>`);
 }
 function seSync(){const e=edShift;e.start=fromIn($('seS').value)||e.start;if(!$('seE').disabled)e.end=fromIn($('seE').value);e.breaks.forEach((b,i)=>{b.s=fromIn($('bs'+i).value)||b.s;b.e=fromIn($('be'+i).value);});}
@@ -843,7 +856,8 @@ function seSave(){
   if(e.end&&e.end<=e.start){toast('入庫が出庫より前です');return;}
   if(e.id){const s=D.shifts.find(x=>x.id===e.id);s.start=e.start;if(S().shiftId!==e.id)s.end=e.end;s.breaks=e.breaks;}
   else{if(!e.end){toast('入庫の時刻を入れてください');return;}D.shifts.push({id:uid(),start:e.start,end:e.end,breaks:e.breaks});D.shifts.sort((a,b)=>a.start-b.start);}
-  save();closeSheet();rSel=dkey(e.start);renderAll();toast('保存しました');
+  if(e.id&&S().shiftId===e.id&&S().mode==='break'&&!brkOpen())D.state.mode='empty',D.state.emptySince=now();
+  save();closeSheet();rSel=dkey(e.start);lastActMode=null;renderAll();toast('保存しました');
 }
 /* manual log */
 let la=null;
