@@ -352,6 +352,7 @@ function periodOf(t){const d=new Date(t),cd=closeDay();let y=d.getFullYear(),m=d
 function periodRange(y,m){const cd=closeDay();return {s:new Date(y,m-1,cd+1).getTime(),e:new Date(y,m,cd+1).getTime()};}
 function periodStats(y,m){const {s,e}=periodRange(y,m);const ss=D.shifts.filter(x=>x.start>=s&&x.start<e),ids=new Set(ss.map(x=>x.id));let fare=0,cnt=0;D.rides.forEach(r=>{if(ids.has(r.shiftId)&&done(r)){fare+=r.fare||0;cnt++;}});return {ss,fare,cnt,s,e};}
 const md=t=>{const d=new Date(t);return (d.getMonth()+1)+'/'+d.getDate();};
+const dhm=t=>{const d=new Date(t);return `${d.getMonth()+1}/${d.getDate()}(${'日月火水木金土'[d.getDay()]}) ${hm(t)}`;};
 const exTax=v=>Math.floor((v||0)/1.1);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let tt;function toast(m){const t=$('toast');t.textContent=m;t.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('on'),1800);}
@@ -966,14 +967,14 @@ function drawMap(){
     const fmin=+$('mFmin').value,fmax=+$('mFmax').value;if(fmin||fmax){if(r.cancelled||!r.fare)return;if(fmin&&r.fare<fmin)return;if(fmax&&r.fare>=fmax)return;}
     const f=r.fare?yen(r.fare):'';
     if(mk.line&&!r.cancelled&&r.pickPos&&hOK(r.pickAt||r.callAt)){
-      const lp=`<b>${r.kind==='app'?esc(r.service||'アプリ'):r.kind==='wait'?'待機':'流し'}</b> ${hm(r.pickAt)}${r.dropAt?'→'+hm(r.dropAt):''}<br>${esc(areaName(r.pickArea,'t'))}${r.dropArea?' → '+esc(areaName(r.dropArea,'t')):''}<br>${f}${ME}`;
+      const lp=`<b>${r.kind==='app'?esc(r.service||'アプリ'):r.kind==='wait'?'待機':'流し'}</b> ${dhm(r.pickAt)}${r.dropAt?'→'+hm(r.dropAt):''}<br>${esc(areaName(r.pickArea,'t'))}${r.dropArea?' → '+esc(areaName(r.dropArea,'t')):''}<br>${f}${ME}`;
       const seq=[['call',r.callPos],['pick',r.pickPos],['drop',r.dropPos]].filter(([k,q])=>q&&mk[k]&&(k!=='call'||r.kind==='app'));
       for(let i=1;i<seq.length;i++){const [k0,a0]=seq[i-1],[,a1]=seq[i];L.polyline([[a0.lat,a0.lng],[a1.lat,a1.lng]],Object.assign({color:C_LINE,weight:2,opacity:.85},k0==='call'?{dashArray:'4 5'}:{})).bindPopup(lp).addTo(layer);}
       seq.forEach(([,q])=>pts.push([q.lat,q.lng]));
     }
-    if(mk.call&&r.kind==='app'&&r.callPos)add(r.callPos,C_CALL,`<b>${esc(r.service)} 受信</b> ${hm(r.callAt)}<br>${esc(areaName(r.callArea,'t'))}${r.cancelled?'<br>キャンセル':'<br>'+f}${ME}`,r.callAt,r.cancelled);
-    if(mk.pick&&r.pickPos&&!r.cancelled)add(r.pickPos,C_NAGASHI,`<b>${r.kind==='app'?esc(r.service||'アプリ'):r.kind==='wait'?'待機':'流し'} 乗車</b> ${hm(r.pickAt)}<br>${esc(areaName(r.pickArea,'t'))}<br>${f}${r.waitMs?'<br>待機 '+dur(r.waitMs):''}${r.callAt&&r.pickAt?'<br>迎車 '+mins(r.pickAt-r.callAt)+'分':''}${ME}`,r.pickAt);
-    if(mk.drop&&r.dropPos)add(r.dropPos,C_DROP,`<b>降車</b> ${hm(r.dropAt)}<br>${esc(areaName(r.dropArea,'t'))}<br>${f}${ME}`,r.dropAt);
+    if(mk.call&&r.kind==='app'&&r.callPos)add(r.callPos,C_CALL,`<b>${esc(r.service)} 受信</b> ${dhm(r.callAt)}<br>${esc(areaName(r.callArea,'t'))}${r.cancelled?'<br>キャンセル':'<br>'+f}${ME}`,r.callAt,r.cancelled);
+    if(mk.pick&&r.pickPos&&!r.cancelled)add(r.pickPos,C_NAGASHI,`<b>${r.kind==='app'?esc(r.service||'アプリ'):r.kind==='wait'?'待機':'流し'} 乗車</b> ${dhm(r.pickAt)}<br>${esc(areaName(r.pickArea,'t'))}<br>${f}${r.waitMs?'<br>待機 '+dur(r.waitMs):''}${r.callAt&&r.pickAt?'<br>迎車 '+mins(r.pickAt-r.callAt)+'分':''}${ME}`,r.pickAt);
+    if(mk.drop&&r.dropPos)add(r.dropPos,C_DROP,`<b>降車</b> ${dhm(r.dropAt)}<br>${esc(areaName(r.dropArea,'t'))}<br>${f}${ME}`,r.dropAt);
   });
   if(mk.spot)(D.spots||[]).forEach(sp=>{const st=spotStats(sp);L.marker([sp.lat,sp.lng],{icon:spotIcon()}).bindPopup(`<b>${esc(sp.name)}</b><br>乗車${st.picks}回・平均${st.picks?yen(st.avg):'-'}<br>待機${st.waits}回${st.ok?'・平均'+mins(st.avgWait)+'分':''}<br><a href="#" onclick="spotDetail('${sp.id}');return false">詳細を見る</a>`).addTo(layer);});
   lastPts=pts;
