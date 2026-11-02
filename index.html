@@ -835,22 +835,29 @@ function drawHours(ss,x){
   $('hours').innerHTML=rows||'<div class="sub">データなし</div>';
 }
 /* lump-sum fare */
+let adjMode='in';
+const inclFromEx=v=>Math.ceil(v*11/10);
 function adjEdit(id){
-  const s=D.shifts.find(x=>x.id===id);if(!s)return;
+  const s=D.shifts.find(x=>x.id===id);if(!s)return;adjMode=D.settings.adjTax||'in';
   const rec=D.rides.filter(r=>r.shiftId===id&&done(r)).reduce((a,r)=>a+(r.fare||0),0),cur=rec+(s.adj||0);
+  const show=v=>adjMode==='ex'?exTax(v):v;
   sheet(`<div class="ttl">営収をまとめて入力</div>
   <div class="sub" style="margin-top:6px">忙しくて打ち込めなかった分をまとめて足します。乗車回数は変わりません。</div>
-  <div class="tiles" style="margin-top:12px">${tile('1件ずつ記録した合計',yen(rec))}${tile('今のまとめ入力',yen(s.adj||0),'var(--yellow)')}</div>
-  <label>この出番の営収合計（税込・メーターの日計など）</label>
-  <input id="adjTotal" type="number" inputmode="numeric" value="${cur||''}" placeholder="例 52000" style="font-size:22px;font-family:var(--mono);text-align:right" oninput="const v=+this.value||0;document.getElementById('adjDiff').textContent=v?'まとめ入力 '+(v-${rec}>=0?'+':'')+yen(v-${rec}):''">
+  <div class="sel chips" style="margin-top:10px">${[['in','税込で入力'],['ex','税抜で入力']].map(([k,l])=>`<button class="chip ${adjMode===k?'on':''}" onclick="adjSwitch('${id}','${k}')">${l}</button>`).join('')}</div>
+  <div class="tiles" style="margin-top:10px">${tile('1件ずつ記録した合計（'+(adjMode==='ex'?'税抜':'税込')+'）',yen(show(rec)))}${tile('今のまとめ入力（'+(adjMode==='ex'?'税抜':'税込')+'）',yen(show(s.adj||0)),'var(--yellow)')}</div>
+  <label>この出番の営収合計（${adjMode==='ex'?'税抜':'税込'}・メーターの日計など）</label>
+  <input id="adjTotal" type="number" inputmode="numeric" value="${cur?show(cur):''}" placeholder="例 52000" style="font-size:22px;font-family:var(--mono);text-align:right" oninput="adjPreview(${rec})">
   <div id="adjDiff" style="margin-top:6px;font-weight:700;color:var(--yellow);text-align:right"></div>
   <button class="btn g full" style="margin-top:14px" onclick="adjSave('${id}',${rec})">保存</button>
   <div class="grid2" style="margin-top:8px"><button class="btn" onclick="closeSheet()">キャンセル</button><button class="btn r" onclick="adjSave('${id}',${rec},true)">まとめ入力を消す</button></div>`);
-  $('adjTotal').dispatchEvent(new Event('input'));
+  adjPreview(rec);
 }
+function adjSwitch(id,k){D.settings.adjTax=k;save();adjEdit(id);}
+function adjTotalIncl(){const v=+$('adjTotal').value||0;return v?(adjMode==='ex'?inclFromEx(v):v):0;}
+function adjPreview(rec){const t=adjTotalIncl();$('adjDiff').innerHTML=t?`まとめ入力 ${t-rec>=0?'+':''}${yen(t-rec)}（税込）<div class="sub" style="font-weight:400">合計 税込 ${yen(t)} ／ 税抜 ${yen(exTax(t))}</div>`:'';}
 function adjSave(id,rec,clear){
   const s=D.shifts.find(x=>x.id===id);if(!s)return;
-  if(clear){delete s.adj;}else{const v=+$('adjTotal').value||0;if(v&&v<rec){toast('1件ずつ記録した合計（'+yen(rec)+'）より少なくなっています');return;}if(!v||v===rec)delete s.adj;else s.adj=v-rec;}
+  if(clear){delete s.adj;}else{const v=adjTotalIncl();if(v&&v<rec){toast('1件ずつ記録した合計より少なくなっています');return;}if(!v||v===rec)delete s.adj;else s.adj=v-rec;}
   save();closeSheet();renderAll();toast('保存しました');
 }
 /* shift edit */
