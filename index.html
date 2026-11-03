@@ -313,7 +313,8 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
       <button class="btn" id="exJson">バックアップ保存</button>
       <button class="btn" id="exCsv">CSV書き出し</button>
     </div>
-    <button class="btn full" style="margin-top:10px" onclick="exportSpots()">📤 付け場だけ書き出し（売上は含みません）</button>
+    <button class="btn full" style="margin-top:10px" onclick="exportSpots()">📤 付け場を渡す（売上は含みません）</button>
+    <button class="btn r full" style="margin-top:10px" onclick="clearShared()">受け取った乗り場の履歴を削除</button>
     <label>バックアップ・付け場ファイルを読み込む</label><input type="file" id="imFile" accept=".json,application/json">
     <button class="btn r full" style="margin-top:14px" id="wipe">全データ削除</button>
   </div>
@@ -1050,7 +1051,7 @@ function renderAna(){
   const rk=Object.keys(tot).sort((a,b)=>tot[b].s-tot[a].s||tot[b].c-tot[a].c).slice(0,12);
   $('aRank').innerHTML=rk.length?`<table class="rank"><tr><th>エリア</th><th>件数</th><th>売上</th><th>平均</th></tr>${rk.map(a=>`<tr><td>${esc(a)}</td><td>${tot[a].c}</td><td>${yen(tot[a].s)}</td><td>${tot[a].n?yen(tot[a].s/tot[a].n):'-'}</td></tr>`).join('')}</table>`:'<div class="sub">データなし</div>';
   // waits
-  const wa={};D.waits.filter(w=>w.end&&F(w.shiftId,w.start)).forEach(w=>{const an=areaName(w.waitArea,g);const o=wa[an]=wa[an]||{n:0,ms:0,ride:0,app:0,ab:0};o.n++;if(w.outcome==='ride'){o.ride++;o.ms+=w.end-w.start;}else if(w.outcome==='app')o.app++;else o.ab++;});
+  const wa={};D.waits.filter(w=>w.end&&!w.shared&&F(w.shiftId,w.start)).forEach(w=>{const an=areaName(w.waitArea,g);const o=wa[an]=wa[an]||{n:0,ms:0,ride:0,app:0,ab:0};o.n++;if(w.outcome==='ride'){o.ride++;o.ms+=w.end-w.start;}else if(w.outcome==='app')o.app++;else o.ab++;});
   const wk=Object.keys(wa).sort((a,b)=>wa[b].n-wa[a].n).slice(0,12);
   $('aWait').innerHTML=wk.length?`<table class="rank"><tr><th>エリア</th><th>待機</th><th>乗車</th><th>平均待ち</th><th>空振り</th></tr>${wk.map(a=>{const o=wa[a];return `<tr onclick="waitListArea(decodeURIComponent('${encodeURIComponent(a)}'))"><td>${esc(a)}</td><td>${o.n}</td><td>${o.ride}</td><td>${o.ride?dur(o.ms/o.ride):'-'}</td><td>${o.ab}</td></tr>`;}).join('')}</table><div class="sub" style="margin-top:6px">行をタップすると、待機の記録を編集・削除できます</div>`:'<div class="sub">待機の記録がまだありません</div>';
   // hourly bars (pickups)
@@ -1082,22 +1083,56 @@ async function shareOrDownload(name,text,title){
   download(name,text,'application/json');
 }
 function exportSpots(){
-  const sp=(D.spots||[]).map(({id,name,type,memo,lat,lng})=>({id,name,type,memo,lat,lng}));
-  if(!sp.length){toast('付け場がまだありません');return;}
-  shareOrDownload('taxilog-spots-'+stamp()+'.json',JSON.stringify({type:'taxilog-spots',v:1,spots:sp}),'TaxiLog 付け場');
+  if(!(D.spots||[]).length){toast('付け場がまだありません');return;}
+  const ex=D.settings.exp||{hist:true,fare:false,name:''};
+  sheet(`<div class="ttl">付け場を渡す</div>
+  <div class="sub" style="margin-top:6px">付け場${D.spots.length}件を書き出します。売上の記録（日報）は入りません。</div>
+  <label style="display:flex;gap:10px;align-items:center;margin-top:14px;font-size:15px;color:var(--ink)"><input type="checkbox" id="exHist" style="width:22px;height:22px" ${ex.hist?'checked':''}> 乗り場の履歴も入れる<span class="sub">（待機時間・台数・実車/空振り・枯渇）</span></label>
+  <label style="display:flex;gap:10px;align-items:center;margin-top:10px;font-size:15px;color:var(--ink)"><input type="checkbox" id="exFare" style="width:22px;height:22px" ${ex.fare?'checked':''}> 料金と行き先も入れる</label>
+  <label>名前（相手の画面で「👥 名前」と表示・空欄可）</label><input id="exName" value="${esc(ex.name||'')}" placeholder="例 こうた">
+  <button class="btn g full" style="margin-top:14px" onclick="doExportSpots()">📤 書き出して送る</button>
+  <button class="btn full" style="margin-top:8px" onclick="closeSheet()">キャンセル</button>`);
+}
+function doExportSpots(){
+  const ex={hist:$('exHist').checked,fare:$('exFare').checked,name:$('exName').value.trim().slice(0,20)};D.settings.exp=ex;save();
+  const sp=D.spots.map(({id,name,type,memo,lat,lng})=>({id,name,type,memo,lat,lng}));
+  const out={type:'taxilog-spots',v:2,from:ex.name,spots:sp};
+  if(ex.hist){
+    const waits=[];
+    D.waits.forEach(w=>{if(!w.end)return;let sid=w.spotId;if(!sid&&!w.noSpot&&w.waitPos){const ns=nearestSpot(w.waitPos);sid=ns&&ns.id;}if(!sid)return;
+      const o={id:w.shared?w.id:'h'+w.id,spotId:sid,start:w.start,end:w.end,outcome:w.outcome||'abandon'};if(w.queue)o.queue=w.queue;if(w.shared){o.from=w.from;}
+      const r=w.shared?null:D.rides.find(x=>x.waitId===w.id);if(r&&r.pickAt)o.rideAt=r.pickAt;else if(w.rideAt)o.rideAt=w.rideAt;
+      if(ex.fare){const f=r?r.fare:w.fare;if(f)o.fare=f;const da=r?r.dropArea:w.drop;if(da)o.drop={w:da.w,t:da.t,c:da.c||''};}
+      waits.push(o);});
+    const events=(D.spotEvents||[]).map(e=>({id:e.shared?e.id:'h'+e.id,spotId:e.spotId,t:e.t,type:e.type,from:e.shared?e.from:undefined}));
+    out.history={waits,events};
+  }
+  closeSheet();
+  shareOrDownload('taxilog-spots-'+stamp()+'.json',JSON.stringify(out),'TaxiLog 付け場');
 }
 function mergeSpots(list){
-  D.spots=D.spots||[];let add=0,skip=0;
+  D.spots=D.spots||[];let add=0,skip=0;const map={};
   list.forEach(x=>{if(!x||!x.name||typeof x.lat!=='number'||typeof x.lng!=='number'){skip++;return;}
-    const dup=D.spots.some(y=>y.id===x.id||(y.name===x.name&&distM(y,x)<50));
-    if(dup){skip++;return;}
-    D.spots.push({id:x.id||uid(),name:String(x.name).slice(0,60),type:SPOT_TYPES.includes(x.type)?x.type:'その他',memo:String(x.memo||'').slice(0,300),lat:x.lat,lng:x.lng,created:now()});add++;});
-  save();return [add,skip];
+    const dup=D.spots.find(y=>y.id===x.id||(y.name===x.name&&distM(y,x)<50))||D.spots.find(y=>distM(y,x)<30);
+    if(dup){map[x.id]=dup.id;skip++;return;}
+    const id=x.id||uid();map[x.id]=id;
+    D.spots.push({id,name:String(x.name).slice(0,60),type:SPOT_TYPES.includes(x.type)?x.type:'その他',memo:String(x.memo||'').slice(0,300),lat:x.lat,lng:x.lng,created:now()});add++;});
+  save();return [add,skip,map];
 }
+function mergeHistory(h,map,from){
+  if(!h)return 0;let n=0;const wids=new Set(D.waits.map(w=>w.id)),eids=new Set((D.spotEvents||[]).map(e=>e.id));D.spotEvents=D.spotEvents||[];
+  (h.waits||[]).forEach(w=>{const sid=map[w.spotId];if(!sid||!w.id||wids.has(w.id)||typeof w.start!=='number'||typeof w.end!=='number')return;
+    const o={id:w.id,shiftId:'shared',spotId:sid,start:w.start,end:w.end,outcome:['ride','app','abandon'].includes(w.outcome)?w.outcome:'abandon',shared:true,from:String(w.from||from||'').slice(0,20)};
+    if(+w.queue)o.queue=Math.min(99,+w.queue);if(+w.rideAt)o.rideAt=+w.rideAt;if(+w.fare)o.fare=+w.fare;if(w.drop&&w.drop.w)o.drop={w:String(w.drop.w).slice(0,30),t:String(w.drop.t||'-').slice(0,30),c:String(w.drop.c||'').slice(0,10)};
+    D.waits.push(o);n++;});
+  (h.events||[]).forEach(e=>{const sid=map[e.spotId];if(!sid||!e.id||eids.has(e.id)||typeof e.t!=='number')return;D.spotEvents.push({id:e.id,spotId:sid,t:e.t,type:'dry',shared:true,from:String(e.from||from||'').slice(0,20)});n++;});
+  save();return n;
+}
+function clearShared(){const a=D.waits.length+(D.spotEvents||[]).length;D.waits=D.waits.filter(w=>!w.shared);D.spotEvents=(D.spotEvents||[]).filter(e=>!e.shared);save();toast('受け取った履歴を'+(a-D.waits.length-D.spotEvents.length)+'件削除しました');}
 async function importFile(inp){
   const f=inp.files[0];if(!f)return;
   try{const j=JSON.parse(await f.text());
-    if(j.type==='taxilog-spots'&&Array.isArray(j.spots)){const [a,sk]=mergeSpots(j.spots);toast(`付け場を${a}件追加`+(sk?`（${sk}件は登録済み）`:''));if(view==='spot')renderSpots();}
+    if(j.type==='taxilog-spots'&&Array.isArray(j.spots)){const [a,sk,map]=mergeSpots(j.spots);const h=mergeHistory(j.history,map,j.from);toast(`付け場を${a}件追加`+(sk?`（${sk}件は登録済み）`:'')+(h?`・履歴${h}件`:''));if(view==='spot')renderSpots();}
     else await importBackup(j);
   }catch(err){toast('ファイルの形式が違います');}
   inp.value='';
@@ -1122,13 +1157,13 @@ function spotStats(sp){
   const near=p=>p&&distM(p,sp)<=SPOT_R;
   const ws=D.waits.filter(w=>w.end&&(w.spotId===sp.id||(!w.spotId&&!w.noSpot&&near(w.waitPos))));
   const ok=ws.filter(w=>w.outcome==='ride');
-  const picks=D.rides.filter(r=>done(r)&&near(r.pickPos));
+  const picks=D.rides.filter(r=>done(r)&&near(r.pickPos)).concat(ws.filter(w=>w.shared&&w.outcome==='ride'&&w.rideAt).map(w=>({pickAt:w.rideAt,fare:w.fare||0,_noFare:!w.fare})));
   const calls=D.rides.filter(r=>r.kind==='app'&&near(r.callPos));
-  const fare=picks.reduce((a,r)=>a+(r.fare||0),0);
+  const fp=picks.filter(r=>!r._noFare),fare=fp.reduce((a,r)=>a+(r.fare||0),0);
   const hours=Array(24).fill(0);picks.forEach(r=>hours[new Date(r.pickAt).getHours()]++);
   const wh=Array(24).fill(0),whn=Array(24).fill(0);ok.forEach(w=>{const h=new Date(w.start).getHours();wh[h]+=w.end-w.start;whn[h]++;});
   return {waits:ws.length,ok:ok.length,ab:ws.filter(w=>w.outcome==='abandon').length,avgWait:ok.length?ok.reduce((a,w)=>a+w.end-w.start,0)/ok.length:0,
-    picks:picks.length,fare,avg:picks.length?fare/picks.length:0,calls:calls.length,hours,wh,whn};
+    picks:picks.length,fare,avg:fp.length?fare/fp.length:0,calls:calls.length,hours,wh,whn};
 }
 let spSort='near',spHour=new Date().getHours();
 let spListMap=null,spListLayer=null;
@@ -1174,12 +1209,12 @@ function spotDetail(id,keepFilter){
   const ws=spotWaits(s),wids=new Set(ws.map(w=>w.id));
   const qs=ws.filter(w=>w.queue).map(w=>w.queue);
   // 30-min histogram of pickups at/near the spot
-  const picks=D.rides.filter(r=>done(r)&&(wids.has(r.waitId)||near(r.pickPos)));
+  const picks=D.rides.filter(r=>done(r)&&(wids.has(r.waitId)||near(r.pickPos))).concat(ws.filter(w=>w.shared&&w.outcome==='ride'&&w.rideAt).map(w=>({pickAt:w.rideAt})));
   const bins=Array(48).fill(0);picks.forEach(r=>{const d=new Date(r.pickAt);bins[d.getHours()*2+(d.getMinutes()>=30?1:0)]++;});
   const nd=new Date(),cur=nd.getHours()*2+(nd.getMinutes()>=30?1:0),mx=Math.max(1,...bins);
   // logs
   const logs=[];
-  ws.filter(w=>w.end||w.id===S().waitId).forEach(w=>{const r=D.rides.find(x=>x.waitId===w.id)||(w.outcome==='app'?D.rides.find(x=>x.kind==='app'&&x.callAt>=w.end-1000&&x.callAt<=w.end+120000):null);logs.push({t:w.start,type:w.end?(w.outcome==='ride'?'ride':w.outcome==='app'?'app':'miss'):'now',w,r});});
+  ws.filter(w=>w.end||w.id===S().waitId).forEach(w=>{const r=w.shared?(w.rideAt||w.fare||w.drop?{fare:w.fare,dropArea:w.drop}:null):D.rides.find(x=>x.waitId===w.id)||(w.outcome==='app'?D.rides.find(x=>x.kind==='app'&&x.callAt>=w.end-1000&&x.callAt<=w.end+120000):null);logs.push({t:w.start,type:w.end?(w.outcome==='ride'?'ride':w.outcome==='app'?'app':'miss'):'now',w,r});});
   (D.spotEvents||[]).filter(e=>e.spotId===s.id).forEach(e=>logs.push({t:e.t,type:'dry',e}));
   logs.sort((a,b)=>b.t-a.t);
   const shown=logs.filter(l=>spDow==='all'?true:spDow==='dry'?l.type==='dry':new Date(l.t).getDay()===+spDow);
@@ -1191,7 +1226,7 @@ function spotDetail(id,keepFilter){
     if(l.w){const wm=l.w.end?mins(l.w.end-l.w.start):mins(now()-l.w.start);line+=` ・ 待機 ${wm}分`;if(l.w.queue)line+=` ・ 🚕${l.w.queue}台目`;
       if(l.r){if(l.type==='app')line+=` ・ ${esc(l.r.service||'アプリ')}${l.r.cancelled?'（取消）':''}`;if(l.r.dropArea||l.r.dropPos)line+=' → '+esc(aName(l.r.dropArea,l.r.dropPos));if(l.r.fare&&!l.r.cancelled)fare=yen(l.r.fare);}}
     else line+=' ・ 乗り場に車なし';
-    return `<div style="padding:10px 0;border-bottom:1px solid var(--line)" ${l.w&&l.type!=='now'?`onclick="waitEdit('${l.w.id}','spot:${s.id}')"`:''}><div class="row"><span class="tag" style="background:${bg};color:${fg};font-size:13px;padding:4px 8px">${tl}</span><span class="sp"></span><b style="font-family:var(--mono);color:var(--green);font-size:16px">${fare}</b></div><div style="color:var(--green);font-size:13px;margin-top:5px">${line}</div></div>`;}).join('');
+    return `<div style="padding:10px 0;border-bottom:1px solid var(--line)" ${l.w&&l.type!=='now'?`onclick="waitEdit('${l.w.id}','spot:${s.id}')"`:''}><div class="row"><span class="tag" style="background:${bg};color:${fg};font-size:13px;padding:4px 8px">${tl}</span>${(l.w&&l.w.shared)||(l.e&&l.e.shared)?`<span class="tag" style="background:#2a3140;color:#cfd6e4;margin-left:6px">👥 ${esc((l.w||l.e).from||'共有')}</span>`:''}<span class="sp"></span><b style="font-family:var(--mono);color:var(--green);font-size:16px">${fare}</b></div><div style="color:var(--green);font-size:13px;margin-top:5px">${line}</div></div>`;}).join('');
   const canWait=S().mode==='empty'||S().mode==='wait';
   sheet(`<div class="row"><span style="font-size:24px">${SPOT_ICON[s.type]||'📍'}</span><div class="ttl" style="border:0;padding:0;font-size:18px">${esc(s.name)}</div><div class="sp"></div><span class="tag t-wait">${esc(s.type)}</span></div>
   ${s.memo?`<div class="sub" style="margin-top:6px;white-space:pre-wrap">${esc(s.memo)}</div>`:''}
