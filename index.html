@@ -223,11 +223,13 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
   <div class="card" style="padding:10px">
     <div class="sel chips" id="mKinds" style="margin-top:0"></div>
     <div class="row" style="margin-top:8px">
-      <select id="mPeriod" style="flex:1"><option value="30">直近30日</option><option value="7">直近7日</option><option value="90">直近90日</option><option value="1">今日の出番</option><option value="date">日付を指定</option><option value="0">全期間</option></select>
+      <select id="mPeriod" style="flex:1"><option value="30">直近30日</option><option value="7">直近7日</option><option value="90">直近90日</option><option value="1">今日の出番</option><option value="date">日付・範囲を指定</option><option value="0">全期間</option></select>
       <select id="mDow" style="flex:1"><option value="all">全曜日</option><option value="0">日曜日</option><option value="1">月曜日</option><option value="2">火曜日</option><option value="3">水曜日</option><option value="4">木曜日</option><option value="5">金曜日</option><option value="6">土曜日</option></select>
     </div>
+    <div class="row hide" id="mDateRow" style="margin-top:8px">
+      <input type="date" id="mDate" style="flex:1;min-width:0;padding:10px 6px;font-size:15px"><span class="sub">〜</span><input type="date" id="mDate2" style="flex:1;min-width:0;padding:10px 6px;font-size:15px">
+    </div>
     <div class="row" style="margin-top:8px">
-      <input type="date" id="mDate" class="hide" style="flex:1">
       <select id="mHourSel" style="flex:1"></select>
     </div>
     <div class="row" style="margin-top:8px"><span class="sub" style="white-space:nowrap">料金</span>
@@ -244,10 +246,10 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
   <div class="card">
     <div class="ttl">絞り込み</div>
     <div class="row">
-      <div style="flex:1"><label>期間</label><select id="aPeriod"><option value="30">直近30日</option><option value="7">直近7日</option><option value="90">直近90日</option><option value="1">今日の出番</option><option value="date">日付を指定</option><option value="0">全期間</option></select></div>
+      <div style="flex:1"><label>期間</label><select id="aPeriod"><option value="30">直近30日</option><option value="7">直近7日</option><option value="90">直近90日</option><option value="1">今日の出番</option><option value="date">日付・範囲を指定</option><option value="0">全期間</option></select></div>
       <div style="flex:1"><label>曜日</label><select id="aDow"><option value="all">全曜日</option><option value="0">日曜日</option><option value="1">月曜日</option><option value="2">火曜日</option><option value="3">水曜日</option><option value="4">木曜日</option><option value="5">金曜日</option><option value="6">土曜日</option></select></div>
     </div>
-    <input type="date" id="aDate" class="hide" style="margin-top:8px">
+    <div class="row hide" id="aDateRow" style="margin-top:8px"><input type="date" id="aDate" style="flex:1;min-width:0;padding:10px 6px;font-size:15px"><span class="sub">〜</span><input type="date" id="aDate2" style="flex:1;min-width:0;padding:10px 6px;font-size:15px"></div>
     <div class="sub" style="margin-top:6px">曜日・日付は出庫した日で判定します（明け番の深夜分も出庫日に含めます）</div>
   </div>
   <div class="card">
@@ -922,7 +924,7 @@ $('rNext').onclick=()=>{rView=new Date(rView.getFullYear(),rView.getMonth()+1,1)
 function makeFilter(per,date,dow){
   const sb=Object.fromEntries(D.shifts.map(s=>[s.id,s])),cur=curShift()||D.shifts[D.shifts.length-1];
   return (sid,t)=>{const s=sb[sid],st=s?s.start:t;
-    if(per==='date'){if(!date||dkey(st)!==date)return false;}
+    if(per==='date'){const [d1,d2]=String(date||'').split('|');const k=dkey(st),lo=d1&&d2&&d2<d1?d2:d1,hi=d1&&d2&&d2<d1?d1:(d2||d1);if(!lo||k<lo||k>hi)return false;}
     else if(per==='1'){if(!cur||sid!==cur.id)return false;}
     else if(+per&&t<now()-(+per)*86400000)return false;
     if(dow!=='all'&&new Date(st).getDay()!==+dow)return false;
@@ -988,7 +990,7 @@ function renderMapCtl(){
 }
 function drawMap(){
   if(!map)return;layer.clearLayers();
-  const hs=$('mHourSel').value;const pts=[];const F=makeFilter($('mPeriod').value,$('mDate').value,$('mDow').value);$('mDate').classList.toggle('hide',$('mPeriod').value!=='date');
+  const hs=$('mHourSel').value;const pts=[];const F=makeFilter($('mPeriod').value,$('mDate').value+'|'+$('mDate2').value,$('mDow').value);$('mDateRow').classList.toggle('hide',$('mPeriod').value!=='date');
   const hOK=t=>{if(hs==='all')return true;const [a,b]=hs.split('-').map(Number);const h=new Date(t).getHours();return h>=a&&h<b;};
   const add=(p,color,html,t,hollow)=>{if(!p||!hOK(t))return;pts.push([p.lat,p.lng]);L.circleMarker([p.lat,p.lng],{radius:8,color:hollow?color:'#fff',weight:hollow?3:2,fillColor:color,fillOpacity:hollow?.15:.95}).bindPopup(html).addTo(layer);};
   D.rides.forEach(r=>{
@@ -1013,15 +1015,15 @@ function drawMap(){
 let lastPts=[];
 (function(){const st=[];for(let v=1000;v<=20000;v+=1000)st.push(v);st.push(25000,30000);$('mFmin').innerHTML='<option value="0">下限なし</option>'+st.map(v=>`<option value="${v}">¥${v.toLocaleString()}以上</option>`).join('');$('mFmax').innerHTML='<option value="0">上限なし</option>'+st.map(v=>`<option value="${v}">¥${v.toLocaleString()}未満</option>`).join('');})();
 (function(){const o=['<option value="all">全時間帯</option>'];for(let h=0;h<24;h++)o.push(`<option value="${h}-${h+1}">${h}時台</option>`);$('mHourSel').innerHTML=o.join('');})();
-['mPeriod','mDow','mDate','mHourSel','mFmin','mFmax'].forEach(id=>$(id).onchange=()=>{const a=+$('mFmin').value,b=+$('mFmax').value;if(a&&b&&a>=b){if(id==='mFmin')$('mFmax').value='0';else $('mFmin').value='0';}if(id==='mPeriod'&&$('mPeriod').value==='date'&&!$('mDate').value)$('mDate').value=dkey(now());drawMap();});
+['mPeriod','mDow','mDate','mDate2','mHourSel','mFmin','mFmax'].forEach(id=>$(id).onchange=()=>{const a=+$('mFmin').value,b=+$('mFmax').value;if(a&&b&&a>=b){if(id==='mFmin')$('mFmax').value='0';else $('mFmin').value='0';}if(id==='mPeriod'&&$('mPeriod').value==='date'&&!$('mDate').value){$('mDate').value=dkey(now());$('mDate2').value=dkey(now());}if(id==='mDate'&&$('mDate2').value&&$('mDate2').value<$('mDate').value)$('mDate2').value=$('mDate').value;drawMap();});
 
 /* ============ analysis ============ */
 let aAxis='pick';
 function renderAna(){
   $('aAxis').innerHTML=[['pick','乗車地点'],['call','アプリ受信地点'],['drop','降車地点']].map(([k,l])=>`<button class="chip ${aAxis===k?'on':''}" onclick="aAxis='${k}';renderAna()">${l}</button>`).join('');
   const g=$('aGran').value,step=+$('aStep').value,metric=$('aMetric').value,per=$('aPeriod').value;
-  $('aDate').classList.toggle('hide',per!=='date');if(per==='date'&&!$('aDate').value)$('aDate').value=dkey(now());
-  const F=makeFilter(per,$('aDate').value,$('aDow').value),F2=makeFilter(per,$('aDate').value,'all');
+  $('aDateRow').classList.toggle('hide',per!=='date');if(per==='date'&&!$('aDate').value){$('aDate').value=dkey(now());$('aDate2').value=dkey(now());}
+  const AD=$('aDate').value+'|'+$('aDate2').value;const F=makeFilter(per,AD,$('aDow').value),F2=makeFilter(per,AD,'all');
   const RS=D.rides.filter(r=>F(r.shiftId,r.pickAt||r.callAt));
   // records for axis
   let recs=[];
@@ -1064,7 +1066,7 @@ function renderAna(){
   const sk=Object.keys(sv).sort((a,b)=>sv[b].s-sv[a].s);
   $('aSvc').innerHTML=sk.length?`<table class="rank"><tr><th>種類</th><th>件数</th><th>取消</th><th>売上</th><th>平均</th></tr>${sk.map(k=>{const o=sv[k];return `<tr><td>${esc(k)}</td><td>${o.c}</td><td>${o.cx||'-'}</td><td>${yen(o.s)}</td><td>${o.n?yen(o.s/o.n):'-'}</td></tr>`;}).join('')}</table>`:'<div class="sub">データなし</div>';
 }
-['aMetric','aPeriod','aGran','aStep','aDow','aDate'].forEach(id=>$(id).onchange=renderAna);
+['aMetric','aPeriod','aGran','aStep','aDow','aDate','aDate2'].forEach(id=>$(id).onchange=renderAna);
 
 /* ============ settings ============ */
 function fillSet(){const s=D.settings;$('sGoal').value=s.goal||'';$('sPlan').value=s.plan||'';$('sRate').value=s.rate||'';$('sSvc').value=s.svc;$('sWake').checked=!!s.wake;$('sDayGoal').value=s.dayGoal||'';$('sClose').value=s.closeDay||15;$('sShiftH').value=s.shiftH||'';$('sFee').value=s.pickFee??'';}
@@ -1332,7 +1334,7 @@ function waitBack(){
 }
 let waArea=null;
 function waitListArea(an){
-  waArea=an;const g=$('aGran').value,per=$('aPeriod').value,F=makeFilter(per,$('aDate').value,$('aDow').value);
+  waArea=an;const g=$('aGran').value,per=$('aPeriod').value,F=makeFilter(per,$('aDate').value+'|'+$('aDate2').value,$('aDow').value);
   const ws=D.waits.filter(w=>w.end&&F(w.shiftId,w.start)&&areaName(w.waitArea,g)===an).sort((a,b)=>b.start-a.start);
   renderAna();
   sheet(`<div class="ttl">${esc(an)} の待機</div><div class="sub" style="margin:4px 0 10px">タップで編集・削除できます</div>${ws.map(w=>`<div class="sub" style="margin-top:6px">${new Date(w.start).getMonth()+1}/${new Date(w.start).getDate()}（${'日月火水木金土'[new Date(w.start).getDay()]}）</div>`+waitCard(w,'area:'+an)).join('')||'<div class="sub">記録なし</div>'}
