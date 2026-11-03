@@ -257,7 +257,7 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
     <label>対象</label>
     <div class="sel chips" id="aAxis" style="margin-top:0"></div>
     <div class="row">
-      <div style="flex:1"><label>集計</label><select id="aMetric"><option value="cnt">件数</option><option value="sum">売上合計</option><option value="avg">平均単価</option></select></div>
+      <div style="flex:1"><label>集計</label><select id="aMetric"><option value="cnt">件数</option><option value="sum">売上合計(税抜)</option><option value="avg">平均単価(税抜)</option></select></div>
     </div>
     <div class="row">
       <div style="flex:1"><label>エリア単位</label><select id="aGran"><option value="town">町名</option><option value="t">丁目まで</option><option value="w">区・市</option></select></div>
@@ -291,7 +291,7 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
     <div id="aWait" style="margin-top:8px"></div>
   </div>
   <div class="card">
-    <div class="ttl">時間帯別の売上</div>
+    <div class="ttl">時間帯別の売上（税抜）</div>
     <div class="bars" id="aBars"></div><div class="bx" id="aBx"></div>
   </div>
   <div class="card">
@@ -363,7 +363,8 @@ function periodRange(y,m){const cd=closeDay();return {s:new Date(y,m-1,cd+1).get
 function periodStats(y,m){const {s,e}=periodRange(y,m);const ss=D.shifts.filter(x=>x.start>=s&&x.start<e),ids=new Set(ss.map(x=>x.id));let fare=0,cnt=0;D.rides.forEach(r=>{if(ids.has(r.shiftId)&&done(r)){fare+=r.fare||0;cnt++;}});ss.forEach(x=>fare+=x.adj||0);return {ss,fare,cnt,s,e};}
 const md=t=>{const d=new Date(t);return (d.getMonth()+1)+'/'+d.getDate();};
 const dhm=t=>{const d=new Date(t);return `${d.getMonth()+1}/${d.getDate()}(${'日月火水木金土'[d.getDay()]}) ${hm(t)}`;};
-const exTax=v=>Math.floor((v||0)/1.1);
+const yenX=v=>yen(exTax(v));
+const exTax=v=>Math.floor((v||0)*10/11+1e-6);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let tt;function toast(m){const t=$('toast');t.textContent=m;t.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('on'),1800);}
 function vib(){try{navigator.vibrate&&navigator.vibrate(30);}catch(e){}}
@@ -1045,11 +1046,11 @@ function renderSpotAna(F){
   const key={eff:r=>-r.eff,rate:r=>-r.rate,fast:r=>r.avgWait==null?1e15:r.avgWait,avg:r=>-(r.avgFare||0),n:r=>-r.n}[aSpSort];
   rows.sort((a,b)=>key(a)-key(b));
   $('aSpots').innerHTML=rows.length?rows.map((r,i)=>`<div class="logc" onclick="spotDetail('${r.sp.id}')">
-    <div class="lt"><span class="tm" style="width:auto">${i+1}</span><span style="font-size:18px">${SPOT_ICON[r.sp.type]||'📍'}</span><b style="font-size:15px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.sp.name)}</b><span class="fr" style="font-size:15px" title="待機効率">${r.eff?yen(r.eff)+'/h':'-'}</span></div>
+    <div class="lt"><span class="tm" style="width:auto">${i+1}</span><span style="font-size:18px">${SPOT_ICON[r.sp.type]||'📍'}</span><b style="font-size:15px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.sp.name)}</b><span class="fr" style="font-size:15px" title="待機効率">${r.eff?yenX(r.eff)+'/h':'-'}</span></div>
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:6px;text-align:center">
-      ${[['待機',r.n+'回'],['乗れた率',Math.round(r.rate*100)+'%'],['平均待ち',r.avgWait!=null?mins(r.avgWait)+'分':'-'],['平均単価',r.avgFare?yen(r.avgFare):'-']].map(([l,v])=>`<div><div style="font-size:10px;color:var(--green)">${l}</div><div style="font-family:var(--mono);font-weight:700;font-size:13px">${v}</div></div>`).join('')}
+      ${[['待機',r.n+'回'],['乗れた率',Math.round(r.rate*100)+'%'],['平均待ち',r.avgWait!=null?mins(r.avgWait)+'分':'-'],['平均単価',r.avgFare?yenX(r.avgFare):'-']].map(([l,v])=>`<div><div style="font-size:10px;color:var(--green)">${l}</div><div style="font-family:var(--mono);font-weight:700;font-size:13px">${v}</div></div>`).join('')}
     </div>
-    <div class="sub" style="margin-top:4px;font-size:11px">実車${r.ok}・アプリ${r.app}・空振り${r.ab}${r.q!=null?' ・ 並び中央値'+r.q.toFixed(1)+'台':''}${r.best!=null?' ・ よく乗れる時間 '+r.best+'時台':''}${r.dry?' ・ 🚨枯渇'+r.dry:''}${r.shared?' ・ 👥共有'+r.shared+'件':''}</div></div>`).join('')+'<div class="sub" style="margin-top:6px;font-size:11px">待機効率＝乗れた料金の合計 ÷ 待機した時間の合計（空振りの時間も含む）</div>'
+    <div class="sub" style="margin-top:4px;font-size:11px">実車${r.ok}・アプリ${r.app}・空振り${r.ab}${r.q!=null?' ・ 並び中央値'+r.q.toFixed(1)+'台':''}${r.best!=null?' ・ よく乗れる時間 '+r.best+'時台':''}${r.dry?' ・ 🚨枯渇'+r.dry:''}${r.shared?' ・ 👥共有'+r.shared+'件':''}</div></div>`).join('')+'<div class="sub" style="margin-top:6px;font-size:11px">待機効率・単価は税抜。待機効率＝乗れた料金の合計 ÷ 待機した時間の合計（空振りの時間も含む）</div>'
     :'<div class="sub">この条件の待機記録がありません</div>';
 }
 function renderAna(){
@@ -1071,21 +1072,21 @@ function renderAna(){
     const dk=dkey(s.start),q=byDay[dk]=byDay[dk]||{f:0,c:0,w:0};q.f+=x.fare;q.c+=x.cnt;q.w+=x.bind-x.brk;});
   const W='日月火水木金土';
   renderSpotAna(F);
-  $('aDowT').innerHTML=shs.length?`<table class="rank"><tr><th>曜日</th><th>出番</th><th>平均営収</th><th>平均回数</th><th>時間営収</th></tr>${[1,2,3,4,5,6,0].filter(k=>agg[k]).map(k=>{const o=agg[k];return `<tr><td style="color:${k==0?'#ff8a8a':k==6?'#8fb2ff':'inherit'}">${W[k]}</td><td>${o.n}</td><td>${yen(o.f/o.n)}</td><td>${(o.c/o.n).toFixed(1)}</td><td>${o.w?yen(o.f/(o.w/3600000)):'-'}</td></tr>`;}).join('')}</table>`:'<div class="sub">データなし</div>';
+  $('aDowT').innerHTML=shs.length?`<table class="rank"><tr><th>曜日</th><th>出番</th><th>平均営収(税抜)</th><th>平均回数</th><th>時間営収</th></tr>${[1,2,3,4,5,6,0].filter(k=>agg[k]).map(k=>{const o=agg[k];return `<tr><td style="color:${k==0?'#ff8a8a':k==6?'#8fb2ff':'inherit'}">${W[k]}</td><td>${o.n}</td><td>${yenX(o.f/o.n)}</td><td>${(o.c/o.n).toFixed(1)}</td><td>${o.w?yenX(o.f/(o.w/3600000)):'-'}</td></tr>`;}).join('')}</table>`:'<div class="sub">データなし</div>';
   const dks=Object.keys(byDay).sort().reverse();
-  $('aDayT').innerHTML=dks.length?`<table class="rank"><tr><th>日付</th><th>営収</th><th>回数</th><th>時間営収</th></tr>${dks.slice(0,40).map(k=>{const q=byDay[k],[,m,d]=k.split('-').map(Number),wd=new Date(k+'T00:00').getDay();return `<tr onclick="rView=new Date(${k.slice(0,4)},${m-1},1);rSel='${k}';go('report')"><td>${m}/${d}<span style="color:${wd==0?'#ff8a8a':wd==6?'#8fb2ff':'var(--sub)'}">（${W[wd]}）</span></td><td>${yen(q.f)}</td><td>${q.c}</td><td>${q.w?yen(q.f/(q.w/3600000)):'-'}</td></tr>`;}).join('')}</table><div class="sub" style="margin-top:6px">行をタップするとその日の日報を開きます</div>`:'<div class="sub">データなし</div>';
+  $('aDayT').innerHTML=dks.length?`<table class="rank"><tr><th>日付</th><th>営収(税抜)</th><th>回数</th><th>時間営収</th></tr>${dks.slice(0,40).map(k=>{const q=byDay[k],[,m,d]=k.split('-').map(Number),wd=new Date(k+'T00:00').getDay();return `<tr onclick="rView=new Date(${k.slice(0,4)},${m-1},1);rSel='${k}';go('report')"><td>${m}/${d}<span style="color:${wd==0?'#ff8a8a':wd==6?'#8fb2ff':'var(--sub)'}">（${W[wd]}）</span></td><td>${yenX(q.f)}</td><td>${q.c}</td><td>${q.w?yenX(q.f/(q.w/3600000)):'-'}</td></tr>`;}).join('')}</table><div class="sub" style="margin-top:6px">行をタップするとその日の日報を開きます</div>`:'<div class="sub">データなし</div>';
   const nb=24/step;const cell={},tot={};
   recs.forEach(x=>{const an=areaName(x.a,g);const b=Math.floor(new Date(x.t).getHours()/step);
     (cell[an]=cell[an]||Array.from({length:nb},()=>({c:0,s:0,n:0})))[b].c++;cell[an][b].s+=x.fare;if(x.ok&&x.fare)cell[an][b].n++;
     tot[an]=tot[an]||{c:0,s:0,n:0};tot[an].c++;tot[an].s+=x.fare;if(x.ok&&x.fare)tot[an].n++;});
   const areas=Object.keys(tot).sort((a,b)=>tot[b].c-tot[a].c).slice(0,15);
-  const val=o=>metric==='cnt'?o.c:metric==='sum'?o.s:(o.n?o.s/o.n:0);
+  const val=o=>metric==='cnt'?o.c:metric==='sum'?exTax(o.s):(o.n?exTax(o.s/o.n):0);
   let mx=0;areas.forEach(a=>cell[a].forEach(o=>mx=Math.max(mx,val(o))));
   const fmt=v=>!v?'':metric==='cnt'?v:(v>=10000?(v/10000).toFixed(1)+'万':Math.round(v/100)/10+'k');
   $('aHeat').innerHTML=areas.length?`<table><tr><th></th>${Array.from({length:nb},(_,i)=>`<th>${i*step}</th>`).join('')}</tr>${areas.map(a=>`<tr><td class="a">${esc(a)}</td>${cell[a].map(o=>{const v=val(o),k=mx?v/mx:0;return `<td style="background:rgba(0,229,160,${v?0.12+k*0.75:0.04});color:${k>.55?'#06281d':'var(--ink)'}">${fmt(v)}</td>`;}).join('')}</tr>`).join('')}</table><div class="sub" style="margin-top:6px">列＝開始時刻（${step}時間ごと）・上位15エリア</div>`:'<div class="sub">データがまだありません。乗車を記録すると表示されます。</div>';
   // ranking
   const rk=Object.keys(tot).sort((a,b)=>tot[b].s-tot[a].s||tot[b].c-tot[a].c).slice(0,12);
-  $('aRank').innerHTML=rk.length?`<table class="rank"><tr><th>エリア</th><th>件数</th><th>売上</th><th>平均</th></tr>${rk.map(a=>`<tr><td>${esc(a)}</td><td>${tot[a].c}</td><td>${yen(tot[a].s)}</td><td>${tot[a].n?yen(tot[a].s/tot[a].n):'-'}</td></tr>`).join('')}</table>`:'<div class="sub">データなし</div>';
+  $('aRank').innerHTML=rk.length?`<table class="rank"><tr><th>エリア</th><th>件数</th><th>売上(税抜)</th><th>平均</th></tr>${rk.map(a=>`<tr><td>${esc(a)}</td><td>${tot[a].c}</td><td>${yenX(tot[a].s)}</td><td>${tot[a].n?yenX(tot[a].s/tot[a].n):'-'}</td></tr>`).join('')}</table>`:'<div class="sub">データなし</div>';
   // waits
   const wa={};D.waits.filter(w=>w.end&&!w.shared&&F(w.shiftId,w.start)).forEach(w=>{const an=areaName(w.waitArea,g);const o=wa[an]=wa[an]||{n:0,ms:0,ride:0,app:0,ab:0};o.n++;if(w.outcome==='ride'){o.ride++;o.ms+=w.end-w.start;}else if(w.outcome==='app')o.app++;else o.ab++;});
   const wk=Object.keys(wa).sort((a,b)=>wa[b].n-wa[a].n).slice(0,12);
@@ -1093,12 +1094,12 @@ function renderAna(){
   // hourly bars (pickups)
   const hb=Array(24).fill(0);RS.filter(done).forEach(r=>hb[new Date(r.pickAt).getHours()]+=r.fare||0);
   const hm2=Math.max(1,...hb);
-  $('aBars').innerHTML=hb.map(v=>`<div style="height:${v/hm2*100}%" title="${yen(v)}"></div>`).join('');
+  $('aBars').innerHTML=hb.map(v=>`<div style="height:${v/hm2*100}%" title="${yenX(v)}"></div>`).join('');
   $('aBx').innerHTML=hb.map((_,i)=>`<span>${i%3===0?i:''}</span>`).join('');
   // service
   const sv={};RS.forEach(r=>{const k=r.kind==='app'?(r.service||'アプリ'):r.kind==='wait'?'待機':'流し';const o=sv[k]=sv[k]||{c:0,cx:0,s:0,n:0};o.c++;if(r.cancelled)o.cx++;if(done(r)){o.s+=r.fare||0;if(r.fare)o.n++;}});
   const sk=Object.keys(sv).sort((a,b)=>sv[b].s-sv[a].s);
-  $('aSvc').innerHTML=sk.length?`<table class="rank"><tr><th>種類</th><th>件数</th><th>取消</th><th>売上</th><th>平均</th></tr>${sk.map(k=>{const o=sv[k];return `<tr><td>${esc(k)}</td><td>${o.c}</td><td>${o.cx||'-'}</td><td>${yen(o.s)}</td><td>${o.n?yen(o.s/o.n):'-'}</td></tr>`;}).join('')}</table>`:'<div class="sub">データなし</div>';
+  $('aSvc').innerHTML=sk.length?`<table class="rank"><tr><th>種類</th><th>件数</th><th>取消</th><th>売上(税抜)</th><th>平均</th></tr>${sk.map(k=>{const o=sv[k];return `<tr><td>${esc(k)}</td><td>${o.c}</td><td>${o.cx||'-'}</td><td>${yenX(o.s)}</td><td>${o.n?yenX(o.s/o.n):'-'}</td></tr>`;}).join('')}</table>`:'<div class="sub">データなし</div>';
 }
 ['aMetric','aPeriod','aGran','aStep','aDow','aDate','aDate2','aSpShared'].forEach(id=>$(id).onchange=renderAna);
 
