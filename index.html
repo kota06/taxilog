@@ -279,6 +279,13 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
     <div id="aRank" style="margin-top:8px"></div>
   </div>
   <div class="card">
+    <div class="ttl">付け場ごとの成績</div>
+    <div class="sub" style="margin-top:4px">上の絞り込み（期間・曜日）で集計・タップで付け場の詳細</div>
+    <div class="sel chips" id="aSpSort" style="margin-top:8px"></div>
+    <label style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:13px;color:var(--ink)"><input type="checkbox" id="aSpShared" style="width:20px;height:20px" checked> 受け取った履歴も含める</label>
+    <div id="aSpots" style="margin-top:8px"></div>
+  </div>
+  <div class="card">
     <div class="ttl">待機スポット（エリア別）</div>
     <div class="sub" style="margin-top:4px">待機してから乗れるまでの平均時間</div>
     <div id="aWait" style="margin-top:8px"></div>
@@ -1019,6 +1026,32 @@ let lastPts=[];
 
 /* ============ analysis ============ */
 let aAxis='pick';
+let aSpSort='eff';
+function renderSpotAna(F){
+  const inclShared=$('aSpShared').checked;
+  $('aSpSort').innerHTML=[['eff','待機効率'],['rate','乗れた率'],['fast','待ち短い'],['avg','平均単価'],['n','回数']].map(([k,l])=>`<button class="chip ${aSpSort===k?'on':''}" onclick="aSpSort='${k}';renderAna()">${l}</button>`).join('');
+  const rows=(D.spots||[]).map(sp=>{
+    const ws=D.waits.filter(w=>w.end&&(inclShared||!w.shared)&&(w.spotId===sp.id||(!w.spotId&&!w.noSpot&&w.waitPos&&distM(w.waitPos,sp)<=SPOT_R))&&F(w.shiftId,w.start));
+    if(!ws.length)return null;
+    const ok=ws.filter(w=>w.outcome==='ride'),app=ws.filter(w=>w.outcome==='app').length,ab=ws.filter(w=>w.outcome==='abandon').length;
+    const waitMs=ws.reduce((a,w)=>a+(w.end-w.start),0),okMs=ok.reduce((a,w)=>a+(w.end-w.start),0);
+    const fares=ok.map(w=>{if(w.shared)return w.fare||0;const r=D.rides.find(x=>x.waitId===w.id);return r&&!r.cancelled?(r.fare||0):0;}).filter(v=>v>0);
+    const fsum=fares.reduce((a,v)=>a+v,0);
+    const hb=Array(24).fill(0);ok.forEach(w=>hb[new Date(w.end).getHours()]++);const bh=hb.indexOf(Math.max(...hb));
+    const qs=ws.filter(w=>w.queue).map(w=>w.queue);
+    const dry=(D.spotEvents||[]).filter(e=>e.spotId===sp.id&&(inclShared||!e.shared)&&F(e.shiftId||'',e.t)).length;
+    return {sp,n:ws.length,ok:ok.length,app,ab,rate:ok.length/ws.length,avgWait:ok.length?okMs/ok.length:null,avgFare:fares.length?fsum/fares.length:null,eff:waitMs>0?fsum/(waitMs/3600000):0,best:ok.length?bh:null,q:qs.length?median(qs):null,dry,shared:ws.filter(w=>w.shared).length};
+  }).filter(Boolean);
+  const key={eff:r=>-r.eff,rate:r=>-r.rate,fast:r=>r.avgWait==null?1e15:r.avgWait,avg:r=>-(r.avgFare||0),n:r=>-r.n}[aSpSort];
+  rows.sort((a,b)=>key(a)-key(b));
+  $('aSpots').innerHTML=rows.length?rows.map((r,i)=>`<div class="logc" onclick="spotDetail('${r.sp.id}')">
+    <div class="lt"><span class="tm" style="width:auto">${i+1}</span><span style="font-size:18px">${SPOT_ICON[r.sp.type]||'📍'}</span><b style="font-size:15px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.sp.name)}</b><span class="fr" style="font-size:15px" title="待機効率">${r.eff?yen(r.eff)+'/h':'-'}</span></div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:6px;text-align:center">
+      ${[['待機',r.n+'回'],['乗れた率',Math.round(r.rate*100)+'%'],['平均待ち',r.avgWait!=null?mins(r.avgWait)+'分':'-'],['平均単価',r.avgFare?yen(r.avgFare):'-']].map(([l,v])=>`<div><div style="font-size:10px;color:var(--green)">${l}</div><div style="font-family:var(--mono);font-weight:700;font-size:13px">${v}</div></div>`).join('')}
+    </div>
+    <div class="sub" style="margin-top:4px;font-size:11px">実車${r.ok}・アプリ${r.app}・空振り${r.ab}${r.q!=null?' ・ 並び中央値'+r.q.toFixed(1)+'台':''}${r.best!=null?' ・ よく乗れる時間 '+r.best+'時台':''}${r.dry?' ・ 🚨枯渇'+r.dry:''}${r.shared?' ・ 👥共有'+r.shared+'件':''}</div></div>`).join('')+'<div class="sub" style="margin-top:6px;font-size:11px">待機効率＝乗れた料金の合計 ÷ 待機した時間の合計（空振りの時間も含む）</div>'
+    :'<div class="sub">この条件の待機記録がありません</div>';
+}
 function renderAna(){
   $('aAxis').innerHTML=[['pick','乗車地点'],['call','アプリ受信地点'],['drop','降車地点']].map(([k,l])=>`<button class="chip ${aAxis===k?'on':''}" onclick="aAxis='${k}';renderAna()">${l}</button>`).join('');
   const g=$('aGran').value,step=+$('aStep').value,metric=$('aMetric').value,per=$('aPeriod').value;
@@ -1037,6 +1070,7 @@ function renderAna(){
   shs.forEach(s=>{const x=shiftStats(s),k=new Date(s.start).getDay(),o=agg[k]=agg[k]||{n:0,f:0,c:0,w:0};o.n++;o.f+=x.fare;o.c+=x.cnt;o.w+=x.bind-x.brk;
     const dk=dkey(s.start),q=byDay[dk]=byDay[dk]||{f:0,c:0,w:0};q.f+=x.fare;q.c+=x.cnt;q.w+=x.bind-x.brk;});
   const W='日月火水木金土';
+  renderSpotAna(F);
   $('aDowT').innerHTML=shs.length?`<table class="rank"><tr><th>曜日</th><th>出番</th><th>平均営収</th><th>平均回数</th><th>時間営収</th></tr>${[1,2,3,4,5,6,0].filter(k=>agg[k]).map(k=>{const o=agg[k];return `<tr><td style="color:${k==0?'#ff8a8a':k==6?'#8fb2ff':'inherit'}">${W[k]}</td><td>${o.n}</td><td>${yen(o.f/o.n)}</td><td>${(o.c/o.n).toFixed(1)}</td><td>${o.w?yen(o.f/(o.w/3600000)):'-'}</td></tr>`;}).join('')}</table>`:'<div class="sub">データなし</div>';
   const dks=Object.keys(byDay).sort().reverse();
   $('aDayT').innerHTML=dks.length?`<table class="rank"><tr><th>日付</th><th>営収</th><th>回数</th><th>時間営収</th></tr>${dks.slice(0,40).map(k=>{const q=byDay[k],[,m,d]=k.split('-').map(Number),wd=new Date(k+'T00:00').getDay();return `<tr onclick="rView=new Date(${k.slice(0,4)},${m-1},1);rSel='${k}';go('report')"><td>${m}/${d}<span style="color:${wd==0?'#ff8a8a':wd==6?'#8fb2ff':'var(--sub)'}">（${W[wd]}）</span></td><td>${yen(q.f)}</td><td>${q.c}</td><td>${q.w?yen(q.f/(q.w/3600000)):'-'}</td></tr>`;}).join('')}</table><div class="sub" style="margin-top:6px">行をタップするとその日の日報を開きます</div>`:'<div class="sub">データなし</div>';
@@ -1066,7 +1100,7 @@ function renderAna(){
   const sk=Object.keys(sv).sort((a,b)=>sv[b].s-sv[a].s);
   $('aSvc').innerHTML=sk.length?`<table class="rank"><tr><th>種類</th><th>件数</th><th>取消</th><th>売上</th><th>平均</th></tr>${sk.map(k=>{const o=sv[k];return `<tr><td>${esc(k)}</td><td>${o.c}</td><td>${o.cx||'-'}</td><td>${yen(o.s)}</td><td>${o.n?yen(o.s/o.n):'-'}</td></tr>`;}).join('')}</table>`:'<div class="sub">データなし</div>';
 }
-['aMetric','aPeriod','aGran','aStep','aDow','aDate','aDate2'].forEach(id=>$(id).onchange=renderAna);
+['aMetric','aPeriod','aGran','aStep','aDow','aDate','aDate2','aSpShared'].forEach(id=>$(id).onchange=renderAna);
 
 /* ============ settings ============ */
 function fillSet(){const s=D.settings;$('sGoal').value=s.goal||'';$('sPlan').value=s.plan||'';$('sRate').value=s.rate||'';$('sSvc').value=s.svc;$('sWake').checked=!!s.wake;$('sDayGoal').value=s.dayGoal||'';$('sClose').value=s.closeDay||15;$('sShiftH').value=s.shiftH||'';$('sFee').value=s.pickFee??'';}
