@@ -232,6 +232,7 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
     <div class="row" style="margin-top:8px">
       <select id="mHourSel" style="flex:1"></select>
     </div>
+    <div class="row" style="margin-top:8px"><span class="sub" style="white-space:nowrap">点の大きさ</span><input type="range" id="mSize" min="2" max="12" step="1" style="flex:1;padding:0;accent-color:#00e5a0"><span id="mSizeV" style="font-family:var(--mono);width:22px;text-align:right">5</span></div>
     <div class="row" style="margin-top:8px"><span class="sub" style="white-space:nowrap">料金</span>
       <select id="mFmin" style="flex:1"></select><span class="sub">〜</span><select id="mFmax" style="flex:1"></select>
     </div>
@@ -363,6 +364,7 @@ function periodRange(y,m){const cd=closeDay();return {s:new Date(y,m-1,cd+1).get
 function periodStats(y,m){const {s,e}=periodRange(y,m);const ss=D.shifts.filter(x=>x.start>=s&&x.start<e),ids=new Set(ss.map(x=>x.id));let fare=0,cnt=0;D.rides.forEach(r=>{if(ids.has(r.shiftId)&&done(r)){fare+=r.fare||0;cnt++;}});ss.forEach(x=>fare+=x.adj||0);return {ss,fare,cnt,s,e};}
 const md=t=>{const d=new Date(t);return (d.getMonth()+1)+'/'+d.getDate();};
 const dhm=t=>{const d=new Date(t);return `${d.getMonth()+1}/${d.getDate()}(${'日月火水木金土'[d.getDay()]}) ${hm(t)}`;};
+const mkSize=()=>Math.min(12,Math.max(2,+D.settings.mkSize||5));
 const yenX=v=>yen(exTax(v));
 const exTax=v=>Math.floor((v||0)*10/11+1e-6);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -993,6 +995,7 @@ function applyMapStyle(){
   TILES=tilesFor(st);if(map)setTiles(0);
 }
 function renderMapCtl(){
+  $('mSize').value=mkSize();$('mSizeV').textContent=mkSize();
   const st='osm';
   $('mKinds').innerHTML=[['call','🔴 鳴った場所'],['pick','🔵 乗車'],['drop','⚪ 降車'],['line','🟢 線'],['spot','🟡 付け場']].map(([k,l])=>`<button class="chip ${mk[k]?'on':''}" onclick="mk['${k}']=!mk['${k}'];D.settings.mk={...mk};save();renderMapCtl();drawMap()">${l}</button>`).join('');
 }
@@ -1000,7 +1003,7 @@ function drawMap(){
   if(!map)return;layer.clearLayers();
   const hs=$('mHourSel').value;const pts=[];const F=makeFilter($('mPeriod').value,$('mDate').value+'|'+$('mDate2').value,$('mDow').value);$('mDateRow').classList.toggle('hide',$('mPeriod').value!=='date');
   const hOK=t=>{if(hs==='all')return true;const [a,b]=hs.split('-').map(Number);const h=new Date(t).getHours();return h>=a&&h<b;};
-  const add=(p,color,html,t,hollow)=>{if(!p||!hOK(t))return;pts.push([p.lat,p.lng]);L.circleMarker([p.lat,p.lng],{radius:8,color:hollow?color:'#fff',weight:hollow?3:2,fillColor:color,fillOpacity:hollow?.15:.95}).bindPopup(html).addTo(layer);};
+  const add=(p,color,html,t,hollow)=>{if(!p||!hOK(t))return;pts.push([p.lat,p.lng]);L.circleMarker([p.lat,p.lng],{radius:mkSize(),color:hollow?color:'#fff',weight:hollow?Math.max(1.5,mkSize()*.4):Math.max(1,mkSize()*.3),fillColor:color,fillOpacity:hollow?.15:.95}).bindPopup(html).addTo(layer);};
   D.rides.forEach(r=>{
     if(!F(r.shiftId,r.pickAt||r.callAt))return;
     const ME=`${r.memo?`<div style="margin-top:4px;padding:4px 6px;background:#fff6cc;border-radius:6px;white-space:pre-wrap">📝 ${esc(r.memo)}</div>`:''}<div style="margin-top:6px"><a href="#" onclick="editRide('${r.id}');return false">${r.memo?'✏️ メモ・記録を編集':'📝 メモを書く'}</a></div>`;
@@ -1023,6 +1026,9 @@ function drawMap(){
 let lastPts=[];
 (function(){const st=[];for(let v=1000;v<=20000;v+=1000)st.push(v);st.push(25000,30000);$('mFmin').innerHTML='<option value="0">下限なし</option>'+st.map(v=>`<option value="${v}">¥${v.toLocaleString()}以上</option>`).join('');$('mFmax').innerHTML='<option value="0">上限なし</option>'+st.map(v=>`<option value="${v}">¥${v.toLocaleString()}未満</option>`).join('');})();
 (function(){const o=['<option value="all">全時間帯</option>'];for(let h=0;h<24;h++)o.push(`<option value="${h}-${h+1}">${h}時台</option>`);$('mHourSel').innerHTML=o.join('');})();
+$('mSize').value=mkSize();$('mSizeV').textContent=mkSize();
+$('mSize').oninput=e=>{D.settings.mkSize=+e.target.value;$('mSizeV').textContent=e.target.value;drawMap();};
+$('mSize').onchange=()=>save();
 ['mPeriod','mDow','mDate','mDate2','mHourSel','mFmin','mFmax'].forEach(id=>$(id).onchange=()=>{const a=+$('mFmin').value,b=+$('mFmax').value;if(a&&b&&a>=b){if(id==='mFmin')$('mFmax').value='0';else $('mFmin').value='0';}if(id==='mPeriod'&&$('mPeriod').value==='date'&&!$('mDate').value){$('mDate').value=dkey(now());$('mDate2').value=dkey(now());}if(id==='mDate'&&$('mDate2').value&&$('mDate2').value<$('mDate').value)$('mDate2').value=$('mDate').value;drawMap();});
 
 /* ============ analysis ============ */
@@ -1183,8 +1189,8 @@ $('wipe').onclick=()=>sheet(`<div class="ttl">全データを削除しますか�
 
 /* ============ spots (付け場) ============ */
 const SPOT_R=150;
-const PIN_SVG='<svg width="22" height="30" viewBox="0 0 22 30"><path d="M11 29C11 29 21 17.5 21 10.5A10 10 0 0 0 1 10.5C1 17.5 11 29 11 29Z" fill="#ffcc00" stroke="#6b5200" stroke-width="1.5"/></svg>';
-const spotIcon=()=>L.divIcon({className:'spotpin',html:PIN_SVG,iconSize:[22,30],iconAnchor:[11,29],popupAnchor:[0,-26],tooltipAnchor:[0,-26]});
+const PIN_SVG='<svg width="14" height="19" viewBox="0 0 22 30"><path d="M11 29C11 29 21 17.5 21 10.5A10 10 0 0 0 1 10.5C1 17.5 11 29 11 29Z" fill="#ffcc00" stroke="#6b5200" stroke-width="1.5"/></svg>';
+const spotIcon=()=>{const k=mkSize()/5,w=Math.round(14*k),h=Math.round(19*k);return L.divIcon({className:'spotpin',html:PIN_SVG.replace('width="14" height="19"',`width="${w}" height="${h}"`),iconSize:[w,h],iconAnchor:[w/2,h-1],popupAnchor:[0,-h+3],tooltipAnchor:[0,-h+3]});};
 const SPOT_TYPES=['付け待ち','駅','ホテル','病院','商業施設','乗り場','その他'];
 const SPOT_ICON={'付け待ち':'🅿️','駅':'🚉','ホテル':'🏨','病院':'🏥','商業施設':'🛍️','乗り場':'🚕','その他':'📍'};
 function distM(a,b){const R=6371000,toR=x=>x*Math.PI/180,dLa=toR(b.lat-a.lat),dLo=toR(b.lng-a.lng);const h=Math.sin(dLa/2)**2+Math.cos(toR(a.lat))*Math.cos(toR(b.lat))*Math.sin(dLo/2)**2;return 2*R*Math.asin(Math.sqrt(h));}
