@@ -65,7 +65,7 @@ main{padding:12px 12px calc(84px + env(safe-area-inset-bottom));max-width:640px;
 .it .fr{font-family:var(--mono);font-weight:700}
 .sub{color:var(--sub);font-size:12px}
 nav.tabs{position:fixed;bottom:0;left:0;right:0;z-index:60;display:flex;background:#151a22;border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
-nav.tabs button{flex:1;border:0;background:none;color:var(--sub);padding:8px 0 10px;font-size:11px;font-weight:700;display:flex;flex-direction:column;align-items:center;gap:2px}
+nav.tabs button{flex:1;min-width:0;letter-spacing:-.02em;border:0;background:none;color:var(--sub);padding:8px 0 10px;font-size:11px;font-weight:700;display:flex;flex-direction:column;align-items:center;gap:2px}
 nav.tabs button b{font-size:21px;font-weight:400}
 nav.tabs button.on{color:var(--green);background:#16241f}
 .hide{display:none!important}
@@ -214,9 +214,19 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
     <div id="spHourWrap" class="hide" style="margin-top:8px"><select id="spHour"></select></div>
   </div>
   <div id="spMapBox" style="height:300px;border-radius:14px;overflow:hidden;background:#0d1015;margin-bottom:12px;position:relative;z-index:0"></div>
-  <div class="row" style="margin-bottom:10px;gap:8px"><button class="btn sm" style="flex:1" onclick="mk.hotel=!mk.hotel;D.settings.mk={...mk};save();renderSpots();this.textContent=mk.hotel?'🏨 ホテル表示中':'🏨 ホテルを表示'" id="spHotelBtn">🏨 ホテル表示中</button><button class="btn sm" style="flex:1" onclick="hotelBulk()">🏨 ホテルを付け場に一括登録</button></div>
-  <div class="grid2" style="margin-bottom:12px"><button class="btn" onclick="exportSpots()">📤 付け場を渡す</button><label class="btn" style="margin:0;text-align:center;color:var(--ink);font-size:15px">📥 付け場を読み込む<input type="file" accept=".json,application/json" style="display:none" onchange="importFile(this)"></label></div>
+    <div class="grid2" style="margin-bottom:12px"><button class="btn" onclick="exportSpots()">📤 付け場を渡す</button><label class="btn" style="margin:0;text-align:center;color:var(--ink);font-size:15px">📥 付け場を読み込む<input type="file" accept=".json,application/json" style="display:none" onchange="importFile(this)"></label></div>
   <div class="card"><div class="ttl">付け場</div><div class="sub" style="margin:4px 0 10px">待機開始すると、近く（150m以内）の付け場に自動でひも付きます</div><div id="spList"></div></div>
+</section>
+
+<!-- ================= HOTEL ================= -->
+<section id="v-hotel" class="hide">
+  <div class="card" style="padding:10px">
+    <input id="hoQ" placeholder="🔍 ホテル名・エリアで検索">
+    <div class="sel chips" id="hoSort" style="margin-top:8px"></div>
+  </div>
+  <div id="hoMap" style="height:300px;border-radius:14px;overflow:hidden;background:#0d1015;margin-bottom:12px;position:relative;z-index:0"></div>
+  <div id="hoList"></div>
+  <div class="sub" style="margin:4px 4px 12px">都内の有名ホテル。タップで詳細・付け場に登録できます。位置はおおよそなので、登録後にずれていたら「編集」で直してください。</div>
 </section>
 
 <!-- ================= MAP ================= -->
@@ -338,6 +348,7 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
 <nav class="tabs">
   <button data-go="home" class="on"><b>🏠</b>ホーム</button>
   <button data-go="spot"><b>📍</b>スポット</button>
+  <button data-go="hotel"><b>🏨</b>ホテル</button>
   <button data-go="map"><b>🗺️</b>マップ</button>
   <button data-go="ana"><b>📊</b>分析</button>
   <button data-go="report"><b>📝</b>日報</button>
@@ -942,7 +953,7 @@ function makeFilter(per,date,dow){
     return true;};
 }
 const C_LINE='#16a34a',C_CALL='#ff2d2d',C_NAGASHI='#2563eb',C_WAIT='#16a34a',C_DROP='#6b7280';
-let map=null,layer=null,mapFocus=null;const mk=Object.assign({call:true,pick:true,drop:false,spot:true,line:false,hotel:true},D.settings.mk||{});
+let map=null,layer=null,mapFocus=null;const mk=Object.assign({call:true,pick:true,drop:false,spot:true,line:false},D.settings.mk||{});
 function inPeriod(t,days){if(!days)return true;if(days==1){const s=curShift()||D.shifts[D.shifts.length-1];return s&&t>=s.start&&(!s.end||t<=s.end);}return t>=now()-days*86400000;}
 const LF_CDN=['https://unpkg.com/leaflet@1.9.4/dist/','https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/','https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/'];
 function loadTag(tag,attrs){return new Promise((ok,ng)=>{const el=document.createElement(tag);Object.assign(el,attrs);el.onload=ok;el.onerror=ng;document.head.appendChild(el);setTimeout(ng,10000);});}
@@ -998,7 +1009,7 @@ function applyMapStyle(){
 function renderMapCtl(){
   $('mSize').value=mkSize();$('mSizeV').textContent=mkSize();
   const st='osm';
-  $('mKinds').innerHTML=[['call','🔴 鳴った場所'],['pick','🔵 乗車'],['drop','⚪ 降車'],['line','🟢 線'],['hotel','🏨 ホテル'],['spot','🟡 付け場']].map(([k,l])=>`<button class="chip ${mk[k]?'on':''}" onclick="mk['${k}']=!mk['${k}'];D.settings.mk={...mk};save();renderMapCtl();drawMap()">${l}</button>`).join('');
+  $('mKinds').innerHTML=[['call','🔴 鳴った場所'],['pick','🔵 乗車'],['drop','⚪ 降車'],['line','🟢 線'],['spot','🟡 付け場']].map(([k,l])=>`<button class="chip ${mk[k]?'on':''}" onclick="mk['${k}']=!mk['${k}'];D.settings.mk={...mk};save();renderMapCtl();drawMap()">${l}</button>`).join('');
 }
 function drawMap(){
   if(!map)return;layer.clearLayers();
@@ -1020,7 +1031,6 @@ function drawMap(){
     if(mk.pick&&r.pickPos&&!r.cancelled)add(r.pickPos,C_NAGASHI,`<b>${r.kind==='app'?esc(r.service||'アプリ'):r.kind==='wait'?'待機':'流し'} 乗車</b> ${dhm(r.pickAt)}<br>${esc(areaName(r.pickArea,'t'))}<br>${f}${r.waitMs?'<br>待機 '+dur(r.waitMs):''}${r.callAt&&r.pickAt?'<br>迎車 '+mins(r.pickAt-r.callAt)+'分':''}${ME}`,r.pickAt);
     if(mk.drop&&r.dropPos)add(r.dropPos,C_DROP,`<b>降車</b> ${dhm(r.dropAt)}<br>${esc(areaName(r.dropArea,'t'))}<br>${f}${ME}`,r.dropAt);
   });
-  if(mk.hotel)drawHotels(layer);
   if(mk.spot)(D.spots||[]).forEach(sp=>{const st=spotStats(sp);L.marker([sp.lat,sp.lng],{icon:spotIcon()}).bindPopup(`<b>${esc(sp.name)}</b><br>乗車${st.picks}回・平均${st.picks?yen(st.avg):'-'}<br>待機${st.waits}回${st.ok?'・平均'+mins(st.avgWait)+'分':''}<br><a href="#" onclick="spotDetail('${sp.id}');return false">詳細を見る</a>`).addTo(layer);});
   lastPts=pts;
   if(mapFocus){map.setView(mapFocus,16);mapFocus=null;}
@@ -1227,11 +1237,9 @@ async function drawSpotMap(list){
   setTimeout(()=>spListMap.invalidateSize(),60);
   spListLayer.clearLayers();
   if(lastFix)L.circleMarker([lastFix.lat,lastFix.lng],{radius:7,color:'#fff',weight:2,fillColor:'#2563eb',fillOpacity:1}).addTo(spListLayer);
-  if(mk.hotel)drawHotels(spListLayer);
   list.forEach(({s,st})=>{L.marker([s.lat,s.lng],{icon:spotIcon()}).bindTooltip(esc(s.name),{direction:'top'}).on('click',()=>spotDetail(s.id)).addTo(spListLayer);});
 }
 function renderSpots(){
-  if($('spHotelBtn'))$('spHotelBtn').textContent=mk.hotel?'🏨 ホテル表示中':'🏨 ホテルを表示';
   const q=($('spQ').value||'').trim();
   $('spSort').innerHTML=[['near','現在地周辺'],['top','実績上位'],['hour','時間帯別']].map(([k,l])=>`<button class="chip ${spSort===k?'on':''}" onclick="spSort='${k}';renderSpots()">${l}</button>`).join('');
   $('spHourWrap').classList.toggle('hide',spSort!=='hour');
@@ -1335,23 +1343,53 @@ $('spQ').oninput=renderSpots;
 $('spHour').onchange=e=>{spHour=+e.target.value;renderSpots();};
 (function(){$('spHour').innerHTML=Array.from({length:24},(_,h)=>`<option value="${h}" ${h===spHour?'selected':''}>${h}時台</option>`).join('');})();
 
-/* ============ hotels ============ */
-const HOTELS=[{"n":"帝国ホテル 東京","lat":35.6727,"lng":139.7585,"k":["帝国ホテル","imperial hotel"]},{"n":"ザ・ペニンシュラ東京","lat":35.6747,"lng":139.7612,"k":["ペニンシュラ","peninsula"]},{"n":"ザ・ゲートホテル東京 by HULIC","lat":35.6741,"lng":139.7627,"k":["ゲートホテル東京","gate hotel tokyo"]},{"n":"パレスホテル東京","lat":35.6847,"lng":139.7611,"k":["パレスホテル","palace hotel"]},{"n":"アマン東京","lat":35.6866,"lng":139.7645,"k":["アマン","aman"]},{"n":"フォーシーズンズホテル東京大手町","lat":35.6879,"lng":139.7632,"k":["フォーシーズンズ","four seasons"]},{"n":"星のや東京","lat":35.6874,"lng":139.7676,"k":["星のや","hoshinoya"]},{"n":"フォーシーズンズホテル丸の内 東京","lat":35.6789,"lng":139.7671,"k":["フォーシーズンズ","four seasons"]},{"n":"東京ステーションホテル","lat":35.6807,"lng":139.7656,"k":["ステーションホテル","station hotel"]},{"n":"シャングリ・ラ 東京","lat":35.6831,"lng":139.7697,"k":["シャングリ","shangri"]},{"n":"丸ノ内ホテル","lat":35.6829,"lng":139.7672,"k":["丸ノ内ホテル","marunouchi hotel"]},{"n":"ホテルメトロポリタン丸の内","lat":35.6826,"lng":139.7703,"k":["メトロポリタン丸の内","metropolitan marunouchi"]},{"n":"ブルガリ ホテル 東京","lat":35.6795,"lng":139.7697,"k":["ブルガリ","bulgari"]},{"n":"マンダリン オリエンタル 東京","lat":35.6866,"lng":139.7731,"k":["マンダリン","mandarin"]},{"n":"ロイヤルパークホテル（日本橋）","lat":35.6818,"lng":139.7862,"k":["ロイヤルパークホテル","royal park hotel"]},{"n":"東京エディション銀座","lat":35.6735,"lng":139.7682,"k":["エディション銀座","edition ginza"]},{"n":"ハイアット セントリック 銀座 東京","lat":35.6703,"lng":139.7627,"k":["セントリック","centric"]},{"n":"ミレニアム 三井ガーデンホテル 東京","lat":35.6707,"lng":139.767,"k":["ミレニアム","millennium"]},{"n":"三井ガーデンホテル銀座プレミア","lat":35.6672,"lng":139.764,"k":["銀座プレミア","ginza premier"]},{"n":"ザ・ロイヤルパーク キャンバス 銀座8","lat":35.6685,"lng":139.7615,"k":["キャンバス 銀座","canvas ginza"]},{"n":"コートヤード・マリオット銀座東武ホテル","lat":35.6693,"lng":139.7663,"k":["コートヤード","courtyard"]},{"n":"第一ホテル東京（新橋）","lat":35.6668,"lng":139.7572,"k":["第一ホテル東京","dai-ichi hotel tokyo","daiichi hotel tokyo"]},{"n":"コンラッド東京","lat":35.6626,"lng":139.7615,"k":["コンラッド","conrad"]},{"n":"パークホテル東京","lat":35.6636,"lng":139.763,"k":["パークホテル東京","park hotel tokyo"]},{"n":"ザ ロイヤルパークホテル アイコニック 東京汐留","lat":35.6645,"lng":139.7605,"k":["汐留","shiodome"]},{"n":"ホテル インターコンチネンタル 東京ベイ","lat":35.6555,"lng":139.76,"k":["インターコンチネンタル 東京ベイ","intercontinental tokyo bay"]},{"n":"メズム東京","lat":35.6565,"lng":139.7606,"k":["メズム","mesm"]},{"n":"東京プリンスホテル","lat":35.6582,"lng":139.7471,"k":["東京プリンス","tokyo prince"]},{"n":"ザ・プリンス パークタワー東京","lat":35.6555,"lng":139.7484,"k":["パークタワー","park tower"]},{"n":"アンダーズ 東京","lat":35.6668,"lng":139.7497,"k":["アンダーズ","andaz"]},{"n":"ホテル虎ノ門ヒルズ","lat":35.6672,"lng":139.7484,"k":["ホテル虎ノ門ヒルズ","hotel toranomon hills"]},{"n":"東京エディション虎ノ門","lat":35.6642,"lng":139.7445,"k":["エディション虎ノ門","edition toranomon"]},{"n":"ジャヌ東京","lat":35.6604,"lng":139.7402,"k":["ジャヌ","janu"]},{"n":"The Okura Tokyo（オークラ東京）","lat":35.6668,"lng":139.7432,"k":["オークラ","okura"]},{"n":"ANAインターコンチネンタルホテル東京","lat":35.6683,"lng":139.7399,"k":["anaインターコンチネンタル","ana intercontinental"]},{"n":"ザ・リッツ・カールトン東京","lat":35.6655,"lng":139.731,"k":["リッツ","ritz"]},{"n":"グランド ハイアット 東京","lat":35.6598,"lng":139.7292,"k":["グランドハイアット","grand hyatt"]},{"n":"ザ・キャピトルホテル 東急","lat":35.6735,"lng":139.7418,"k":["キャピトル","capitol"]},{"n":"赤坂エクセルホテル東急","lat":35.6765,"lng":139.7385,"k":["赤坂エクセル","akasaka excel"]},{"n":"ホテルニューオータニ東京","lat":35.68,"lng":139.7338,"k":["ニューオータニ","new otani"]},{"n":"ザ・プリンスギャラリー 東京紀尾井町","lat":35.6793,"lng":139.7363,"k":["プリンスギャラリー","prince gallery"]},{"n":"ホテルグランドアーク半蔵門","lat":35.6814,"lng":139.7428,"k":["グランドアーク","grand arc"]},{"n":"ホテルメトロポリタン エドモント","lat":35.7012,"lng":139.748,"k":["エドモント","edmont"]},{"n":"東京ドームホテル","lat":35.7041,"lng":139.7525,"k":["東京ドームホテル","tokyo dome hotel"]},{"n":"ホテル椿山荘東京","lat":35.7124,"lng":139.7254,"k":["椿山荘","chinzanso"]},{"n":"サンシャインシティプリンスホテル","lat":35.7293,"lng":139.7197,"k":["サンシャインシティプリンス","sunshine city prince"]},{"n":"ホテルメトロポリタン（池袋）","lat":35.73,"lng":139.7083,"k":["ホテルメトロポリタン","hotel metropolitan"]},{"n":"京王プラザホテル","lat":35.6918,"lng":139.6948,"k":["京王プラザ","keio plaza"]},{"n":"ヒルトン東京","lat":35.6927,"lng":139.6926,"k":["ヒルトン東京","hilton tokyo"]},{"n":"ハイアット リージェンシー 東京","lat":35.6913,"lng":139.6918,"k":["ハイアットリージェンシー","hyatt regency"]},{"n":"パーク ハイアット 東京","lat":35.6855,"lng":139.6907,"k":["パークハイアット","park hyatt"]},{"n":"キンプトン新宿東京","lat":35.6879,"lng":139.6918,"k":["キンプトン","kimpton"]},{"n":"小田急ホテルセンチュリーサザンタワー","lat":35.6864,"lng":139.699,"k":["サザンタワー","southern tower"]},{"n":"ホテルグレイスリー新宿","lat":35.6955,"lng":139.7018,"k":["グレイスリー新宿","gracery shinjuku"]},{"n":"新宿プリンスホテル","lat":35.6943,"lng":139.6999,"k":["新宿プリンス","shinjuku prince"]},{"n":"東急歌舞伎町タワー（BELLUSTAR / HOTEL GROOVE）","lat":35.6957,"lng":139.7004,"k":["bellustar","groove","ベルスター"]},{"n":"セルリアンタワー東急ホテル","lat":35.6566,"lng":139.6993,"k":["セルリアン","cerulean"]},{"n":"渋谷エクセルホテル東急","lat":35.6584,"lng":139.6987,"k":["渋谷エクセル","shibuya excel"]},{"n":"渋谷ストリームエクセルホテル東急","lat":35.6572,"lng":139.7027,"k":["ストリーム","stream"]},{"n":"TRUNK(HOTEL)","lat":35.6643,"lng":139.7066,"k":["trunk"]},{"n":"ウェスティンホテル東京","lat":35.6418,"lng":139.7155,"k":["ウェスティン","westin"]},{"n":"ホテル雅叙園東京","lat":35.6327,"lng":139.7148,"k":["雅叙園","gajoen"]},{"n":"シェラトン都ホテル東京","lat":35.6372,"lng":139.7281,"k":["都ホテル","miyako"]},{"n":"ザ・プリンス さくらタワー東京","lat":35.6316,"lng":139.7352,"k":["さくらタワー","sakura tower"]},{"n":"グランドプリンスホテル高輪","lat":35.6329,"lng":139.7363,"k":["グランドプリンスホテル高輪","grand prince hotel takanawa"]},{"n":"グランドプリンスホテル新高輪","lat":35.6304,"lng":139.7345,"k":["新高輪","new takanawa","shin takanawa"]},{"n":"品川プリンスホテル","lat":35.6277,"lng":139.7369,"k":["品川プリンス","shinagawa prince"]},{"n":"ストリングスホテル東京インターコンチネンタル","lat":35.6282,"lng":139.7425,"k":["ストリングス","strings"]},{"n":"東京マリオットホテル","lat":35.6215,"lng":139.7365,"k":["東京マリオット","tokyo marriott"]},{"n":"ヒルトン東京お台場","lat":35.6268,"lng":139.7712,"k":["ヒルトン東京お台場","hilton tokyo odaiba"]},{"n":"グランドニッコー東京 台場","lat":35.6262,"lng":139.774,"k":["グランドニッコー","grand nikko"]},{"n":"羽田エクセルホテル東急","lat":35.5503,"lng":139.7869,"k":["羽田エクセル","haneda excel"]},{"n":"ザ ロイヤルパークホテル 東京羽田","lat":35.5446,"lng":139.7686,"k":["東京羽田","tokyo haneda"]},{"n":"浅草ビューホテル","lat":35.7134,"lng":139.7909,"k":["浅草ビュー","asakusa view"]},{"n":"ザ・ゲートホテル雷門 by HULIC","lat":35.7105,"lng":139.796,"k":["雷門","kaminarimon"]},{"n":"東武ホテルレバント東京","lat":35.6973,"lng":139.8128,"k":["レバント","levant"]},{"n":"ホテル イースト21東京","lat":35.6685,"lng":139.817,"k":["イースト21","east 21"]}];
+/* ============ hotels tab ============ */
+const HOTELS=[{"n":"帝国ホテル 東京","lat":35.6727,"lng":139.7585,"k":["帝国ホテル","imperial hotel"],"a":"丸の内・大手町・日比谷"},{"n":"ザ・ペニンシュラ東京","lat":35.6747,"lng":139.7612,"k":["ペニンシュラ","peninsula"],"a":"丸の内・大手町・日比谷"},{"n":"ザ・ゲートホテル東京 by HULIC","lat":35.6741,"lng":139.7627,"k":["ゲートホテル東京","gate hotel tokyo"],"a":"丸の内・大手町・日比谷"},{"n":"パレスホテル東京","lat":35.6847,"lng":139.7611,"k":["パレスホテル","palace hotel"],"a":"丸の内・大手町・日比谷"},{"n":"アマン東京","lat":35.6866,"lng":139.7645,"k":["アマン","aman"],"a":"丸の内・大手町・日比谷"},{"n":"フォーシーズンズホテル東京大手町","lat":35.6879,"lng":139.7632,"k":["フォーシーズンズ","four seasons"],"a":"丸の内・大手町・日比谷"},{"n":"星のや東京","lat":35.6874,"lng":139.7676,"k":["星のや","hoshinoya"],"a":"丸の内・大手町・日比谷"},{"n":"フォーシーズンズホテル丸の内 東京","lat":35.6789,"lng":139.7671,"k":["フォーシーズンズ","four seasons"],"a":"丸の内・大手町・日比谷"},{"n":"東京ステーションホテル","lat":35.6807,"lng":139.7656,"k":["ステーションホテル","station hotel"],"a":"丸の内・大手町・日比谷"},{"n":"シャングリ・ラ 東京","lat":35.6831,"lng":139.7697,"k":["シャングリ","shangri"],"a":"丸の内・大手町・日比谷"},{"n":"丸ノ内ホテル","lat":35.6829,"lng":139.7672,"k":["丸ノ内ホテル","marunouchi hotel"],"a":"丸の内・大手町・日比谷"},{"n":"ホテルメトロポリタン丸の内","lat":35.6826,"lng":139.7703,"k":["メトロポリタン丸の内","metropolitan marunouchi"],"a":"丸の内・大手町・日比谷"},{"n":"ブルガリ ホテル 東京","lat":35.6795,"lng":139.7697,"k":["ブルガリ","bulgari"],"a":"銀座・日本橋・汐留"},{"n":"マンダリン オリエンタル 東京","lat":35.6866,"lng":139.7731,"k":["マンダリン","mandarin"],"a":"銀座・日本橋・汐留"},{"n":"ロイヤルパークホテル（日本橋）","lat":35.6818,"lng":139.7862,"k":["ロイヤルパークホテル","royal park hotel"],"a":"銀座・日本橋・汐留"},{"n":"東京エディション銀座","lat":35.6735,"lng":139.7682,"k":["エディション銀座","edition ginza"],"a":"銀座・日本橋・汐留"},{"n":"ハイアット セントリック 銀座 東京","lat":35.6703,"lng":139.7627,"k":["セントリック","centric"],"a":"銀座・日本橋・汐留"},{"n":"ミレニアム 三井ガーデンホテル 東京","lat":35.6707,"lng":139.767,"k":["ミレニアム","millennium"],"a":"銀座・日本橋・汐留"},{"n":"三井ガーデンホテル銀座プレミア","lat":35.6672,"lng":139.764,"k":["銀座プレミア","ginza premier"],"a":"銀座・日本橋・汐留"},{"n":"ザ・ロイヤルパーク キャンバス 銀座8","lat":35.6685,"lng":139.7615,"k":["キャンバス 銀座","canvas ginza"],"a":"銀座・日本橋・汐留"},{"n":"コートヤード・マリオット銀座東武ホテル","lat":35.6693,"lng":139.7663,"k":["コートヤード","courtyard"],"a":"銀座・日本橋・汐留"},{"n":"第一ホテル東京（新橋）","lat":35.6668,"lng":139.7572,"k":["第一ホテル東京","dai-ichi hotel tokyo","daiichi hotel tokyo"],"a":"銀座・日本橋・汐留"},{"n":"コンラッド東京","lat":35.6626,"lng":139.7615,"k":["コンラッド","conrad"],"a":"銀座・日本橋・汐留"},{"n":"パークホテル東京","lat":35.6636,"lng":139.763,"k":["パークホテル東京","park hotel tokyo"],"a":"銀座・日本橋・汐留"},{"n":"ザ ロイヤルパークホテル アイコニック 東京汐留","lat":35.6645,"lng":139.7605,"k":["汐留","shiodome"],"a":"銀座・日本橋・汐留"},{"n":"ホテル インターコンチネンタル 東京ベイ","lat":35.6555,"lng":139.76,"k":["インターコンチネンタル 東京ベイ","intercontinental tokyo bay"],"a":"浜松町・芝公園"},{"n":"メズム東京","lat":35.6565,"lng":139.7606,"k":["メズム","mesm"],"a":"浜松町・芝公園"},{"n":"東京プリンスホテル","lat":35.6582,"lng":139.7471,"k":["東京プリンス","tokyo prince"],"a":"浜松町・芝公園"},{"n":"ザ・プリンス パークタワー東京","lat":35.6555,"lng":139.7484,"k":["パークタワー","park tower"],"a":"浜松町・芝公園"},{"n":"アンダーズ 東京","lat":35.6668,"lng":139.7497,"k":["アンダーズ","andaz"],"a":"虎ノ門・赤坂・六本木"},{"n":"ホテル虎ノ門ヒルズ","lat":35.6672,"lng":139.7484,"k":["ホテル虎ノ門ヒルズ","hotel toranomon hills"],"a":"虎ノ門・赤坂・六本木"},{"n":"東京エディション虎ノ門","lat":35.6642,"lng":139.7445,"k":["エディション虎ノ門","edition toranomon"],"a":"虎ノ門・赤坂・六本木"},{"n":"ジャヌ東京","lat":35.6604,"lng":139.7402,"k":["ジャヌ","janu"],"a":"虎ノ門・赤坂・六本木"},{"n":"The Okura Tokyo（オークラ東京）","lat":35.6668,"lng":139.7432,"k":["オークラ","okura"],"a":"虎ノ門・赤坂・六本木"},{"n":"ANAインターコンチネンタルホテル東京","lat":35.6683,"lng":139.7399,"k":["anaインターコンチネンタル","ana intercontinental"],"a":"虎ノ門・赤坂・六本木"},{"n":"ザ・リッツ・カールトン東京","lat":35.6655,"lng":139.731,"k":["リッツ","ritz"],"a":"虎ノ門・赤坂・六本木"},{"n":"グランド ハイアット 東京","lat":35.6598,"lng":139.7292,"k":["グランドハイアット","grand hyatt"],"a":"虎ノ門・赤坂・六本木"},{"n":"ザ・キャピトルホテル 東急","lat":35.6735,"lng":139.7418,"k":["キャピトル","capitol"],"a":"虎ノ門・赤坂・六本木"},{"n":"赤坂エクセルホテル東急","lat":35.6765,"lng":139.7385,"k":["赤坂エクセル","akasaka excel"],"a":"虎ノ門・赤坂・六本木"},{"n":"ホテルニューオータニ東京","lat":35.68,"lng":139.7338,"k":["ニューオータニ","new otani"],"a":"虎ノ門・赤坂・六本木"},{"n":"ザ・プリンスギャラリー 東京紀尾井町","lat":35.6793,"lng":139.7363,"k":["プリンスギャラリー","prince gallery"],"a":"虎ノ門・赤坂・六本木"},{"n":"ホテルグランドアーク半蔵門","lat":35.6814,"lng":139.7428,"k":["グランドアーク","grand arc"],"a":"虎ノ門・赤坂・六本木"},{"n":"ホテルメトロポリタン エドモント","lat":35.7012,"lng":139.748,"k":["エドモント","edmont"],"a":"市ヶ谷・飯田橋・文京"},{"n":"東京ドームホテル","lat":35.7041,"lng":139.7525,"k":["東京ドームホテル","tokyo dome hotel"],"a":"市ヶ谷・飯田橋・文京"},{"n":"ホテル椿山荘東京","lat":35.7124,"lng":139.7254,"k":["椿山荘","chinzanso"],"a":"市ヶ谷・飯田橋・文京"},{"n":"サンシャインシティプリンスホテル","lat":35.7293,"lng":139.7197,"k":["サンシャインシティプリンス","sunshine city prince"],"a":"池袋"},{"n":"ホテルメトロポリタン（池袋）","lat":35.73,"lng":139.7083,"k":["ホテルメトロポリタン","hotel metropolitan"],"a":"池袋"},{"n":"京王プラザホテル","lat":35.6918,"lng":139.6948,"k":["京王プラザ","keio plaza"],"a":"新宿"},{"n":"ヒルトン東京","lat":35.6927,"lng":139.6926,"k":["ヒルトン東京","hilton tokyo"],"a":"新宿"},{"n":"ハイアット リージェンシー 東京","lat":35.6913,"lng":139.6918,"k":["ハイアットリージェンシー","hyatt regency"],"a":"新宿"},{"n":"パーク ハイアット 東京","lat":35.6855,"lng":139.6907,"k":["パークハイアット","park hyatt"],"a":"新宿"},{"n":"キンプトン新宿東京","lat":35.6879,"lng":139.6918,"k":["キンプトン","kimpton"],"a":"新宿"},{"n":"小田急ホテルセンチュリーサザンタワー","lat":35.6864,"lng":139.699,"k":["サザンタワー","southern tower"],"a":"新宿"},{"n":"ホテルグレイスリー新宿","lat":35.6955,"lng":139.7018,"k":["グレイスリー新宿","gracery shinjuku"],"a":"新宿"},{"n":"新宿プリンスホテル","lat":35.6943,"lng":139.6999,"k":["新宿プリンス","shinjuku prince"],"a":"新宿"},{"n":"東急歌舞伎町タワー（BELLUSTAR / HOTEL GROOVE）","lat":35.6957,"lng":139.7004,"k":["bellustar","groove","ベルスター"],"a":"新宿"},{"n":"セルリアンタワー東急ホテル","lat":35.6566,"lng":139.6993,"k":["セルリアン","cerulean"],"a":"渋谷・原宿"},{"n":"渋谷エクセルホテル東急","lat":35.6584,"lng":139.6987,"k":["渋谷エクセル","shibuya excel"],"a":"渋谷・原宿"},{"n":"渋谷ストリームエクセルホテル東急","lat":35.6572,"lng":139.7027,"k":["ストリーム","stream"],"a":"渋谷・原宿"},{"n":"TRUNK(HOTEL)","lat":35.6643,"lng":139.7066,"k":["trunk"],"a":"渋谷・原宿"},{"n":"ウェスティンホテル東京","lat":35.6418,"lng":139.7155,"k":["ウェスティン","westin"],"a":"恵比寿・目黒・白金"},{"n":"ホテル雅叙園東京","lat":35.6327,"lng":139.7148,"k":["雅叙園","gajoen"],"a":"恵比寿・目黒・白金"},{"n":"シェラトン都ホテル東京","lat":35.6372,"lng":139.7281,"k":["都ホテル","miyako"],"a":"恵比寿・目黒・白金"},{"n":"ザ・プリンス さくらタワー東京","lat":35.6316,"lng":139.7352,"k":["さくらタワー","sakura tower"],"a":"品川・高輪"},{"n":"グランドプリンスホテル高輪","lat":35.6329,"lng":139.7363,"k":["グランドプリンスホテル高輪","grand prince hotel takanawa"],"a":"品川・高輪"},{"n":"グランドプリンスホテル新高輪","lat":35.6304,"lng":139.7345,"k":["新高輪","new takanawa","shin takanawa"],"a":"品川・高輪"},{"n":"品川プリンスホテル","lat":35.6277,"lng":139.7369,"k":["品川プリンス","shinagawa prince"],"a":"品川・高輪"},{"n":"ストリングスホテル東京インターコンチネンタル","lat":35.6282,"lng":139.7425,"k":["ストリングス","strings"],"a":"品川・高輪"},{"n":"東京マリオットホテル","lat":35.6215,"lng":139.7365,"k":["東京マリオット","tokyo marriott"],"a":"品川・高輪"},{"n":"ヒルトン東京お台場","lat":35.6268,"lng":139.7712,"k":["ヒルトン東京お台場","hilton tokyo odaiba"],"a":"お台場"},{"n":"グランドニッコー東京 台場","lat":35.6262,"lng":139.774,"k":["グランドニッコー","grand nikko"],"a":"お台場"},{"n":"羽田エクセルホテル東急","lat":35.5503,"lng":139.7869,"k":["羽田エクセル","haneda excel"],"a":"羽田"},{"n":"ザ ロイヤルパークホテル 東京羽田","lat":35.5446,"lng":139.7686,"k":["東京羽田","tokyo haneda"],"a":"羽田"},{"n":"浅草ビューホテル","lat":35.7134,"lng":139.7909,"k":["浅草ビュー","asakusa view"],"a":"浅草・東側"},{"n":"ザ・ゲートホテル雷門 by HULIC","lat":35.7105,"lng":139.796,"k":["雷門","kaminarimon"],"a":"浅草・東側"},{"n":"東武ホテルレバント東京","lat":35.6973,"lng":139.8128,"k":["レバント","levant"],"a":"浅草・東側"},{"n":"ホテル イースト21東京","lat":35.6685,"lng":139.817,"k":["イースト21","east 21"],"a":"浅草・東側"}],H_AREAS=["丸の内・大手町・日比谷", "銀座・日本橋・汐留", "浜松町・芝公園", "虎ノ門・赤坂・六本木", "市ヶ谷・飯田橋・文京", "池袋", "新宿", "渋谷・原宿", "恵比寿・目黒・白金", "品川・高輪", "お台場", "羽田", "浅草・東側"];
 const hNorm=x=>String(x||'').toLowerCase().normalize('NFKC').replace(/[\s・･\-‐ー_.,'’()（）]/g,'');
 function hotelPos(h){const f=(D.hotelFix||{})[h.n];return f?{lat:f.lat,lng:f.lng,fixed:true}:{lat:h.lat,lng:h.lng,fixed:false};}
-const hotelIcon=()=>{const z=Math.round(mkSize()*2.6+2);return L.divIcon({className:'',html:`<div style="width:${z}px;height:${z}px;border-radius:4px;background:#7c3aed;border:1.5px solid #fff;color:#fff;font:700 ${Math.max(7,z*.62)}px/${z}px sans-serif;text-align:center;box-shadow:0 1px 3px #0007">H</div>`,iconSize:[z,z],iconAnchor:[z/2,z/2],popupAnchor:[0,-z/2]});};
-function drawHotels(lay){
+const hotelSpot=h=>{const p=hotelPos(h);return (D.spots||[]).find(s=>s.name===h.n||distM(s,p)<80);};
+const hotelIcon=on=>{const z=Math.round(mkSize()*2.6+2);return L.divIcon({className:'',html:`<div style="width:${z}px;height:${z}px;border-radius:4px;background:${on?'#ffcc00':'#7c3aed'};border:1.5px solid #fff;color:${on?'#3a2a00':'#fff'};font:700 ${Math.max(7,z*.62)}px/${z}px sans-serif;text-align:center;box-shadow:0 1px 3px #0007">H</div>`,iconSize:[z,z],iconAnchor:[z/2,z/2]});};
+let hoSort='area',hoMap=null,hoLayer=null;
+async function drawHotelMap(list){
+  const ok=await loadLeaflet();if(!ok||view!=='hotel')return;
+  if(!hoMap){const c=lastFix?[lastFix.lat,lastFix.lng]:[35.676,139.755];
+    hoMap=L.map('hoMap',{zoomControl:true,attributionControl:false}).setView(c,13);
+    L.tileLayer(MAPSTYLES.osm[1],{maxZoom:19}).addTo(hoMap);hoLayer=L.layerGroup().addTo(hoMap);
+    const Here=L.Control.extend({onAdd(){const b=L.DomUtil.create('button','btn sm');b.textContent='📍 現在地';b.onclick=e=>{L.DomEvent.stop(e);getPos().then(p=>p&&hoMap.setView([p.lat,p.lng],15));};return b;}});
+    new Here({position:'topright'}).addTo(hoMap);}
+  setTimeout(()=>hoMap.invalidateSize(),60);
+  hoLayer.clearLayers();
+  if(lastFix)L.circleMarker([lastFix.lat,lastFix.lng],{radius:6,color:'#fff',weight:2,fillColor:'#2563eb',fillOpacity:1}).addTo(hoLayer);
+  list.forEach(({h,i,p,sp})=>L.marker([p.lat,p.lng],{icon:hotelIcon(!!sp)}).bindTooltip(esc(h.n),{direction:'top'}).on('click',()=>hotelDetail(i)).addTo(hoLayer));
+}
+function renderHotels(){
   hotelRefine();
-  HOTELS.forEach((h,i)=>{const p=hotelPos(h);if((D.spots||[]).some(s=>distM(s,p)<80))return;
-    L.marker([p.lat,p.lng],{icon:hotelIcon()}).bindPopup(`<b>🏨 ${esc(h.n)}</b><div style="font-size:11px;color:#666;margin-top:2px">${p.fixed?'位置：地図データで確認済み':'位置：おおよそ（登録時に直せます）'}</div><div style="margin-top:6px"><a href="#" onclick="hotelAdd(${i});return false">📍 付け場に登録</a></div>`).addTo(lay);});
+  const q=hNorm($('hoQ').value);
+  $('hoSort').innerHTML=[['area','エリア別'],['near','近い順'],['mine','登録済み']].map(([k,l])=>`<button class="chip ${hoSort===k?'on':''}" onclick="hoSort='${k}';renderHotels()">${l}</button>`).join('');
+  let list=HOTELS.map((h,i)=>{const p=hotelPos(h);return {h,i,p,sp:hotelSpot(h),d:lastFix?distM(lastFix,p):null};}).filter(x=>!q||hNorm(x.h.n+x.h.a).includes(q));
+  if(hoSort==='mine')list=list.filter(x=>x.sp);
+  const row=x=>{const st=x.sp?spotStats(x.sp):null;return `<div class="logc" onclick="hotelDetail(${x.i})"><div class="lt"><span style="width:20px;height:20px;border-radius:4px;background:${x.sp?'#ffcc00':'#7c3aed'};color:${x.sp?'#3a2a00':'#fff'};font:700 12px/20px sans-serif;text-align:center;flex:none">H</span><b style="font-size:15px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.h.n)}</b>${x.d!=null?`<span class="sub">${fmtDist(x.d)}</span>`:''}</div>
+    <div class="sub" style="margin-top:3px">${esc(x.h.a)}${x.sp?` ・ <span style="color:var(--yellow)">付け場登録済み</span>${st&&st.waits?` ・ 待機${st.waits}回${st.ok?'・平均'+mins(st.avgWait)+'分':''}`:''}`:''}</div></div>`;};
+  let html='';
+  if(hoSort==='area'){H_AREAS.forEach(a=>{const g=list.filter(x=>x.h.a===a);if(g.length)html+=`<div class="card"><div class="ttl">${esc(a)} <span class="sub">${g.length}件</span></div><div style="margin-top:8px">${g.map(row).join('')}</div></div>`;});}
+  else{if(hoSort==='near'){list.sort((a,b)=>(a.d??1e12)-(b.d??1e12));if(!lastFix)getPos().then(p=>p&&view==='hotel'&&renderHotels());}
+    html=list.length?`<div class="card">${list.map(row).join('')}</div>`:`<div class="card sub">${hoSort==='mine'?'まだ付け場に登録したホテルはありません':'見つかりません'}</div>`;}
+  $('hoList').innerHTML=html;
+  drawHotelMap(list);
 }
-function hotelAdd(i,silent){const h=HOTELS[i],p=hotelPos(h);D.spots=D.spots||[];if(D.spots.some(s=>distM(s,p)<80)){if(!silent)toast('近くに付け場があります');return false;}
-  D.spots.push({id:uid(),name:h.n,type:'ホテル',memo:'',lat:p.lat,lng:p.lng,created:now()});if(!silent){save();toast('付け場に登録しました');try{map&&map.closePopup();spListMap&&spListMap.closePopup();}catch(e){}renderAll();if(view==='spot')renderSpots();}return true;}
-function hotelBulk(){
-  const n=HOTELS.filter(h=>!(D.spots||[]).some(s=>distM(s,hotelPos(h))<80)).length;
-  sheet(`<div class="ttl">ホテルを付け場に一括登録</div><div class="sub" style="margin-top:6px">都内の有名ホテル${HOTELS.length}件のうち、まだ登録していない${n}件を付け場（種類：ホテル）に登録します。あとから1件ずつ削除・位置の修正ができます。</div>
-  <div class="grid2" style="margin-top:14px"><button class="btn" onclick="closeSheet()">キャンセル</button><button class="btn g" onclick="let c=0;HOTELS.forEach((h,i)=>{if(hotelAdd(i,true))c++;});save();closeSheet();renderAll();renderSpots();toast(c+'件を登録しました')">登録する</button></div>`);
+function hotelDetail(i){
+  const h=HOTELS[i],p=hotelPos(h),sp=hotelSpot(h);const d=lastFix?distM(lastFix,p):null;
+  sheet(`<div class="row"><span style="width:26px;height:26px;border-radius:6px;background:${sp?'#ffcc00':'#7c3aed'};color:${sp?'#3a2a00':'#fff'};font:700 16px/26px sans-serif;text-align:center">H</span><div class="ttl" style="border:0;padding:0;font-size:17px">${esc(h.n)}</div></div>
+  <div class="sub" style="margin-top:6px">${esc(h.a)}${d!=null?' ・ ここから'+fmtDist(d):''}</div>
+  <div class="sub" style="margin-top:2px">${p.fixed?'位置：地図データで確認済み':'位置：おおよそ（登録後に「編集」で直せます）'}</div>
+  ${sp?`<button class="btn g full" style="margin-top:14px" onclick="spotDetail('${sp.id}')">📍 付け場の記録を見る</button>`:`<button class="btn g full" style="margin-top:14px" onclick="hotelAdd(${i})">📍 付け場に登録</button>`}
+  ${S().mode==='empty'?`<button class="btn full" style="margin-top:8px" onclick="hotelWait(${i})">▶ ここで待機開始</button>`:''}
+  <div class="grid2" style="margin-top:8px"><button class="btn" onclick="closeSheet();hoMap&&hoMap.setView([${p.lat},${p.lng}],16);window.scrollTo(0,0)">🗺️ 地図で見る</button><button class="btn" onclick="closeSheet()">閉じる</button></div>`);
 }
+function hotelAdd(i,silent){const h=HOTELS[i],p=hotelPos(h);if(hotelSpot(h)){if(!silent)toast('もう登録されています');return null;}
+  const sp={id:uid(),name:h.n,type:'ホテル',memo:'',lat:p.lat,lng:p.lng,created:now()};D.spots=D.spots||[];D.spots.push(sp);save();
+  if(!silent){toast('付け場に登録しました');closeSheet();renderHotels();}return sp;}
+function hotelWait(i){const sp=hotelSpot(HOTELS[i])||hotelAdd(i,true);closeSheet();startWait(sp.id);go('home');}
 let hrBusy=false;
 async function hotelRefine(){
   if(hrBusy||D.hotelFixDone===HOTELS.length||(D.hotelFixTry&&now()-D.hotelFixTry<3600000))return;
@@ -1361,15 +1399,15 @@ async function hotelRefine(){
     const r=await fetch('https://overpass-api.de/api/interpreter',{method:'POST',body:'data='+encodeURIComponent(q),headers:{'Content-Type':'application/x-www-form-urlencoded'}});
     if(!r.ok)throw 0;const j=await r.json();
     const els=(j.elements||[]).map(e=>({lat:e.lat??(e.center&&e.center.lat),lng:e.lon??(e.center&&e.center.lon),names:[e.tags&&e.tags.name,e.tags&&e.tags['name:ja'],e.tags&&e.tags['name:en'],e.tags&&e.tags.brand].filter(Boolean).map(hNorm)})).filter(e=>e.lat&&e.names.length);
-    D.hotelFix=D.hotelFix||{};let got=0;
+    D.hotelFix=D.hotelFix||{};
     HOTELS.forEach(h=>{const keys=h.k.map(hNorm);let best=null,bd=900;
       els.forEach(e=>{if(!keys.some(k=>e.names.some(nm=>nm.includes(k))))return;const d=distM(h,e);if(d<bd){bd=d;best=e;}});
-      if(best){D.hotelFix[h.n]={lat:+best.lat.toFixed(6),lng:+best.lng.toFixed(6)};got++;}});
-    D.hotelFixDone=HOTELS.length;save();
-    if(view==='map')drawMap();if(view==='spot')renderSpots();
+      if(best)D.hotelFix[h.n]={lat:+best.lat.toFixed(6),lng:+best.lng.toFixed(6)};});
+    D.hotelFixDone=HOTELS.length;save();if(view==='hotel')renderHotels();
   }catch(e){}
   hrBusy=false;
 }
+$('hoQ').oninput=renderHotels;
 /* ============ wait edit ============ */
 const W_OUT={ride:['🟢 乗車','#0f3328','var(--green)'],app:['🔴 アプリ','#4a1518','#ff8f8f'],abandon:['⚪ 空振り','#2a3140','#aab2c2']};
 function waitPlace(w){const sp=w.spotId&&(D.spots||[]).find(x=>x.id===w.spotId);return sp?'📍'+sp.name:aName(w.waitArea,w.waitPos);}
@@ -1422,9 +1460,9 @@ function waitListArea(an){
 }
 /* ============ nav ============ */
 let view='home';
-function go(v){view=v;['home','spot','report','map','ana','set'].forEach(x=>$('v-'+x).classList.toggle('hide',x!==v));
+function go(v){view=v;['home','spot','hotel','report','map','ana','set'].forEach(x=>$('v-'+x).classList.toggle('hide',x!==v));
   document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.go===v));
-  if(v==='report')renderReport();if(v==='spot')renderSpots();if(v==='ana')renderAna();if(v==='set')fillSet();
+  if(v==='report')renderReport();if(v==='spot')renderSpots();if(v==='hotel')renderHotels();if(v==='ana')renderAna();if(v==='set')fillSet();
   if(v==='map'){renderMapCtl();initMap().then(ok=>{if(ok)setTimeout(()=>{map.invalidateSize();drawMap();},80);});}
   window.scrollTo(0,0);}
 document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>go(b.dataset.go));
