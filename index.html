@@ -230,7 +230,7 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
       <input type="date" id="mDate" style="flex:1;min-width:0;padding:10px 6px;font-size:15px"><span class="sub">〜</span><input type="date" id="mDate2" style="flex:1;min-width:0;padding:10px 6px;font-size:15px">
     </div>
     <div class="row" style="margin-top:8px">
-      <select id="mHourSel" style="flex:1"></select>
+      <span class="sub" style="white-space:nowrap">時間</span><select id="mH1" style="flex:1"></select><span class="sub">〜</span><select id="mH2" style="flex:1"></select>
     </div>
     <div class="row" style="margin-top:8px"><span class="sub" style="white-space:nowrap">点の大きさ</span><input type="range" id="mSize" min="2" max="12" step="1" style="flex:1;padding:0;accent-color:#00e5a0"><span id="mSizeV" style="font-family:var(--mono);width:22px;text-align:right">5</span></div>
     <div class="row" style="margin-top:8px"><span class="sub" style="white-space:nowrap">料金</span>
@@ -1001,8 +1001,8 @@ function renderMapCtl(){
 }
 function drawMap(){
   if(!map)return;layer.clearLayers();
-  const hs=$('mHourSel').value;const pts=[];const F=makeFilter($('mPeriod').value,$('mDate').value+'|'+$('mDate2').value,$('mDow').value);$('mDateRow').classList.toggle('hide',$('mPeriod').value!=='date');
-  const hOK=t=>{if(hs==='all')return true;const [a,b]=hs.split('-').map(Number);const h=new Date(t).getHours();return h>=a&&h<b;};
+  const h1=$('mH1').value,h2=$('mH2').value;const pts=[];const F=makeFilter($('mPeriod').value,$('mDate').value+'|'+$('mDate2').value,$('mDow').value);$('mDateRow').classList.toggle('hide',$('mPeriod').value!=='date');
+  const hOK=t=>{if(h1==='all'&&h2==='all')return true;const h=new Date(t).getHours(),a=h1==='all'?0:+h1,b=h2==='all'?23:+h2;return a<=b?(h>=a&&h<=b):(h>=a||h<=b);};
   const add=(p,color,html,t,hollow)=>{if(!p||!hOK(t))return;pts.push([p.lat,p.lng]);L.circleMarker([p.lat,p.lng],{radius:mkSize(),color:hollow?color:'#fff',weight:hollow?Math.max(1.5,mkSize()*.4):Math.max(1,mkSize()*.3),fillColor:color,fillOpacity:hollow?.15:.95}).bindPopup(html).addTo(layer);};
   D.rides.forEach(r=>{
     if(!F(r.shiftId,r.pickAt||r.callAt))return;
@@ -1025,11 +1025,11 @@ function drawMap(){
 }
 let lastPts=[];
 (function(){const st=[];for(let v=1000;v<=20000;v+=1000)st.push(v);st.push(25000,30000);$('mFmin').innerHTML='<option value="0">下限なし</option>'+st.map(v=>`<option value="${v}">¥${v.toLocaleString()}以上</option>`).join('');$('mFmax').innerHTML='<option value="0">上限なし</option>'+st.map(v=>`<option value="${v}">¥${v.toLocaleString()}未満</option>`).join('');})();
-(function(){const o=['<option value="all">全時間帯</option>'];for(let h=0;h<24;h++)o.push(`<option value="${h}-${h+1}">${h}時台</option>`);$('mHourSel').innerHTML=o.join('');})();
+(function(){const hs=Array.from({length:24},(_,h)=>h);$('mH1').innerHTML='<option value="all">指定なし</option>'+hs.map(h=>`<option value="${h}">${h}時から</option>`).join('');$('mH2').innerHTML='<option value="all">指定なし</option>'+hs.map(h=>`<option value="${h}">${h}時台まで</option>`).join('');})();
 $('mSize').value=mkSize();$('mSizeV').textContent=mkSize();
 $('mSize').oninput=e=>{D.settings.mkSize=+e.target.value;$('mSizeV').textContent=e.target.value;drawMap();};
 $('mSize').onchange=()=>save();
-['mPeriod','mDow','mDate','mDate2','mHourSel','mFmin','mFmax'].forEach(id=>$(id).onchange=()=>{const a=+$('mFmin').value,b=+$('mFmax').value;if(a&&b&&a>=b){if(id==='mFmin')$('mFmax').value='0';else $('mFmin').value='0';}if(id==='mPeriod'&&$('mPeriod').value==='date'&&!$('mDate').value){$('mDate').value=dkey(now());$('mDate2').value=dkey(now());}if(id==='mDate'&&$('mDate2').value&&$('mDate2').value<$('mDate').value)$('mDate2').value=$('mDate').value;drawMap();});
+['mPeriod','mDow','mDate','mDate2','mH1','mH2','mFmin','mFmax'].forEach(id=>$(id).onchange=()=>{const a=+$('mFmin').value,b=+$('mFmax').value;if(a&&b&&a>=b){if(id==='mFmin')$('mFmax').value='0';else $('mFmin').value='0';}if(id==='mPeriod'&&$('mPeriod').value==='date'&&!$('mDate').value){$('mDate').value=dkey(now());$('mDate2').value=dkey(now());}if(id==='mDate'&&$('mDate2').value&&$('mDate2').value<$('mDate').value)$('mDate2').value=$('mDate').value;drawMap();});
 
 /* ============ analysis ============ */
 let aAxis='pick';
