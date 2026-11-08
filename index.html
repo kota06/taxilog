@@ -332,11 +332,25 @@ canvas.cum{width:100%;height:240px;display:block;margin-top:8px}
     位置はボタンを押した瞬間だけ取得します（常時追跡はしません）。エリア名はOpenStreetMap（Nominatim）で住所に変換しています。地図は国土地理院の地理院タイル（予備: © OpenStreetMap contributors）
   </div>
 </section>
+<!-- ================= HOTEL ================= -->
+<section id="v-hotel" class="hide">
+  <div class="card" style="padding:10px">
+    <div class="sel chips" id="hArea" style="margin-top:0"></div>
+    <div class="sel chips" id="hWhen"></div>
+    <div class="row" style="margin-top:8px"><input type="date" id="hDate" style="flex:1.3"><input type="time" id="hTime" step="300" style="flex:1"></div>
+    <div id="hDay" class="sub" style="margin-top:8px"></div>
+  </div>
+  <div class="card"><div class="ttl">朝の波（30分ごと・予想）</div><div class="sub" style="margin-top:4px">6時〜14時。黄色が選んだ時刻</div><div class="bars" id="hBars" style="height:80px"></div><div class="row sub" style="justify-content:space-between;margin-top:4px"><span>6</span><span>8</span><span>10</span><span>12</span><span>14時</span></div></div>
+  <div id="hMapBox" style="height:260px;border-radius:14px;overflow:hidden;background:#0d1015;margin-bottom:12px;position:relative;z-index:0"></div>
+  <div class="card"><div class="ttl">これから30分の狙い目</div><div class="sub" style="margin:4px 0 6px">チェックアウト時刻・部屋数・曜日・自分の乗車実績から出した目安です。タップで時刻や位置を直せます</div><div class="list" id="hList"></div>
+  <button class="btn full" style="margin-top:10px" onclick="hotelAdd()">＋ 今いる場所にホテルを追加</button></div>
+</section>
 </main>
 
 <nav class="tabs">
   <button data-go="home" class="on"><b>🏠</b>ホーム</button>
   <button data-go="spot"><b>📍</b>スポット</button>
+  <button data-go="hotel"><b>🏨</b>ホテル</button>
   <button data-go="map"><b>🗺️</b>マップ</button>
   <button data-go="ana"><b>📊</b>分析</button>
   <button data-go="report"><b>📝</b>日報</button>
@@ -1381,11 +1395,148 @@ function waitListArea(an){
   sheet(`<div class="ttl">${esc(an)} の待機</div><div class="sub" style="margin:4px 0 10px">タップで編集・削除できます</div>${ws.map(w=>`<div class="sub" style="margin-top:6px">${new Date(w.start).getMonth()+1}/${new Date(w.start).getDate()}（${'日月火水木金土'[new Date(w.start).getDay()]}）</div>`+waitCard(w,'area:'+an)).join('')||'<div class="sub">記録なし</div>'}
   <button class="btn full" style="margin-top:10px" onclick="closeSheet()">閉じる</button>`);
 }
+/* ============ hotel checkout forecast ============ */
+// ok:1 = チェックアウト時刻を予約サイト等で確認済み / 0 = 目安（タップで修正可）
+const HOTELS=[
+ {id:'keioplaza',a:'shinjuku',n:'京王プラザホテル',lat:35.6905,lng:139.6950,co:'11:00',rooms:1455,t:'lux',ok:1},
+ {id:'hyattreg',a:'shinjuku',n:'ハイアット リージェンシー 東京',lat:35.6914,lng:139.6912,co:'11:00',rooms:746,t:'lux',ok:1},
+ {id:'hiltontyo',a:'shinjuku',n:'ヒルトン東京',lat:35.6927,lng:139.6907,co:'11:00',rooms:830,t:'lux',ok:1},
+ {id:'parkhyatt',a:'shinjuku',n:'パーク ハイアット 東京',lat:35.6856,lng:139.6907,co:'12:00',rooms:177,t:'lux',ok:1},
+ {id:'kimpton',a:'shinjuku',n:'キンプトン新宿東京',lat:35.6880,lng:139.6899,co:'12:00',rooms:151,t:'lux',ok:0},
+ {id:'washington',a:'shinjuku',n:'新宿ワシントンホテル',lat:35.6877,lng:139.6930,co:'11:00',rooms:1280,t:'biz',ok:1},
+ {id:'southern',a:'shinjuku',n:'小田急ホテルセンチュリーサザンタワー',lat:35.6865,lng:139.7003,co:'11:00',rooms:375,t:'lux',ok:0},
+ {id:'sunroute',a:'shinjuku',n:'ホテル サンルート プラザ 新宿',lat:35.6866,lng:139.6995,co:'11:00',rooms:624,t:'biz',ok:0},
+ {id:'prince',a:'shinjuku',n:'新宿プリンスホテル',lat:35.6940,lng:139.7004,co:'11:00',rooms:571,t:'biz',ok:0},
+ {id:'gracery',a:'shinjuku',n:'ホテルグレイスリー新宿',lat:35.6951,lng:139.7020,co:'11:00',rooms:970,t:'biz',ok:0},
+ {id:'groove',a:'shinjuku',n:'HOTEL GROOVE SHINJUKU',lat:35.6958,lng:139.7006,co:'11:00',rooms:538,t:'lux',ok:0},
+ {id:'granbell',a:'shinjuku',n:'新宿グランベルホテル',lat:35.6945,lng:139.7065,co:'11:00',rooms:380,t:'biz',ok:0},
+ {id:'millennium',a:'ginza',n:'ミレニアム 三井ガーデンホテル 東京',lat:35.6692,lng:139.7676,co:'12:00',rooms:329,t:'lux',ok:1},
+ {id:'mgpremier',a:'ginza',n:'三井ガーデンホテル銀座プレミア',lat:35.6667,lng:139.7628,co:'12:00',rooms:361,t:'lux',ok:1},
+ {id:'peninsula',a:'ginza',n:'ザ・ペニンシュラ東京',lat:35.6747,lng:139.7608,co:'12:00',rooms:314,t:'lux',ok:1},
+ {id:'imperial',a:'ginza',n:'帝国ホテル 東京',lat:35.6729,lng:139.7584,co:'12:00',rooms:570,t:'lux',ok:0},
+ {id:'centric',a:'ginza',n:'ハイアット セントリック 銀座 東京',lat:35.6714,lng:139.7672,co:'12:00',rooms:164,t:'lux',ok:0},
+ {id:'edition',a:'ginza',n:'東京エディション銀座',lat:35.6745,lng:139.7698,co:'12:00',rooms:86,t:'lux',ok:0},
+ {id:'courtyard',a:'ginza',n:'コートヤード・マリオット銀座東武ホテル',lat:35.6680,lng:139.7660,co:'12:00',rooms:206,t:'lux',ok:0},
+ {id:'monterey',a:'ginza',n:'ホテルモントレ銀座',lat:35.6720,lng:139.7700,co:'11:00',rooms:224,t:'biz',ok:0},
+ {id:'gatehotel',a:'ginza',n:'ザ・ゲートホテル東京 by HULIC',lat:35.6730,lng:139.7609,co:'11:00',rooms:164,t:'biz',ok:0},
+ {id:'daiichi',a:'ginza',n:'第一ホテル東京（新橋）',lat:35.6655,lng:139.7590,co:'12:00',rooms:278,t:'lux',ok:0},
+ {id:'conrad',a:'ginza',n:'コンラッド東京（汐留）',lat:35.6640,lng:139.7620,co:'12:00',rooms:290,t:'lux',ok:0},
+];
+const H_AREAS=[['all','全部'],['shinjuku','新宿'],['ginza','銀座']];
+let hWhen='now',hMap=null,hLayer=null;
+const toMin=s=>{const [h,m]=String(s||'11:00').split(':').map(Number);return (h||0)*60+(m||0);};
+const fromMin=m=>pad(Math.floor(m/60)%24)+':'+pad(Math.round(m%60));
+function hotels(){const ov=D.settings.hotelOv||{},add=D.settings.hotelAdd||[];
+  return HOTELS.concat(add).map(h=>Object.assign({},h,ov[h.id]||{})).filter(h=>!h.hide);}
+function hDist(a,b){const R=6371000,r=Math.PI/180,dl=(b.lat-a.lat)*r,dn=(b.lng-a.lng)*r;const x=Math.sin(dl/2)**2+Math.cos(a.lat*r)*Math.cos(b.lat*r)*Math.sin(dn/2)**2;return 2*R*Math.asin(Math.sqrt(x));}
+/* --- 祝日（固定・ハッピーマンデー・春分秋分・振替・国民の休日） --- */
+function baseHol(d){const y=d.getFullYear(),m=d.getMonth()+1,day=d.getDate(),w=d.getDay(),nth=Math.ceil(day/7);
+  const fix={'1-1':1,'2-11':1,'2-23':1,'4-29':1,'5-3':1,'5-4':1,'5-5':1,'8-11':1,'11-3':1,'11-23':1};
+  if(fix[m+'-'+day])return true;
+  if(w===1&&((m===1&&nth===2)||(m===7&&nth===3)||(m===9&&nth===3)||(m===10&&nth===2)))return true;
+  const k=y-1980,q=Math.floor(k/4);
+  if(m===3&&day===Math.floor(20.8431+0.242194*k)-q)return true;
+  if(m===9&&day===Math.floor(23.2488+0.242194*k)-q)return true;
+  return false;}
+const addD=(d,n)=>new Date(d.getFullYear(),d.getMonth(),d.getDate()+n);
+function isHol(d){if(baseHol(d))return true;
+  for(let i=1;i<8;i++){const p=addD(d,-i);if(!baseHol(p))break;if(p.getDay()===0)return true;}
+  if(d.getDay()!==0&&baseHol(addD(d,-1))&&baseHol(addD(d,1)))return true;
+  return false;}
+function isOff(d){const w=d.getDay(),m=d.getMonth()+1,day=d.getDate();return w===0||w===6||isHol(d)||(m===12&&day>=29)||(m===1&&day<=3);}
+function dayInfo(d){const off=isOff(d),nextOff=isOff(addD(d,1)),prevOff=isOff(addD(d,-1));
+  const last=off&&!nextOff;let runLen=0;if(off){let i=0;while(isOff(addD(d,-i))&&i<10)i++;runLen=i;}
+  let label=off?(isHol(d)?'祝日':(d.getDay()===0?'日曜':d.getDay()===6?'土曜':'休み')):'平日';
+  if(last)label+='・連休/休日の最終日';else if(off&&!prevOff)label+='・休みの初日';else if(!off&&prevOff)label+='・休み明け';
+  return {off,last,first:off&&!prevOff,after:!off&&prevOff,runLen,label};}
+/* --- 出発の波（分単位の強さ） --- */
+const gs=(x,mu,sd)=>Math.exp(-0.5*((x-mu)/sd)**2);
+function hWave(h,t,di){const co=toMin(h.co),lux=h.t!=='biz';
+  let main=gs(t,co-30,40),early=gs(t,465,50);
+  let wm,we;
+  if(lux){wm=di.last?1.35:di.off?1.15:0.9;we=di.off?0.12:0.35;}
+  else{wm=di.last?1.2:di.off?1.0:0.85;we=di.off?0.3:(di.after?1.1:0.9);}
+  return Math.sqrt(h.rooms||200)*(main*wm+early*we);}
+function hWin(h,t,di){let s=0;for(let k=0;k<30;k+=5)s+=hWave(h,t+k,di);return s/6;}
+/* --- 自分の実績（ホテル150m以内で乗車） --- */
+function hHist(h,t,off){let n=0,fare=0,all=0;
+  D.rides.forEach(r=>{if(!done(r)||!r.pickPos||!r.pickAt)return;if(hDist(h,r.pickPos)>150)return;all++;
+    const d=new Date(r.pickAt);if(isOff(d)!==off)return;const m=d.getHours()*60+d.getMinutes();if(Math.abs(m-t)>45)return;n++;fare+=r.fare||0;});
+  return {n,fare,all};}
+function hTarget(){const d=new Date();
+  if(hWhen==='now')return d;
+  if(hWhen===30||hWhen===60)return new Date(d.getTime()+hWhen*60000);
+  if(hWhen==='tm'){const t=addD(d,1);t.setHours(10,30,0,0);return t;}
+  const dv=$('hDate').value,tv=$('hTime').value;if(!dv)return d;const [y,mo,da]=dv.split('-').map(Number);const [hh,mm]=(tv||'10:00').split(':').map(Number);return new Date(y,mo-1,da,hh,mm);}
+function hScored(){const tg=hTarget(),day=new Date(tg.getFullYear(),tg.getMonth(),tg.getDate()),di=dayInfo(day),t=tg.getHours()*60+tg.getMinutes();
+  const ar=D.settings.hArea||'all';
+  const list=hotels().filter(h=>ar==='all'||h.a===ar).map(h=>{const hi=hHist(h,t,di.off);const base=hWin(h,t,di);return Object.assign(h,{hi,base,score:base*(1+Math.min(2,hi.n*0.25))});});
+  return {tg,di,t,list};}
+function hStatus(h,t){const co=toMin(h.co),pk=co-30;
+  if(t>co+20)return ['終了','var(--sub)'];
+  if(t>=co-75)return ['🔥 ピーク中','var(--orange)'];
+  const left=pk-t;return [`ピークまで ${left>=60?Math.floor(left/60)+'時間'+(left%60?left%60+'分':''):left+'分'}`,'var(--green)'];}
+function renderHotel(){
+  const ar=D.settings.hArea||'all';
+  $('hArea').innerHTML=H_AREAS.map(([k,l])=>`<button class="chip ${ar===k?'on':''}" onclick="D.settings.hArea='${k}';save();renderHotel()">${l}</button>`).join('');
+  $('hWhen').innerHTML=[['now','今'],[30,'30分後'],[60,'1時間後'],['tm','明日10:30']].map(([k,l])=>`<button class="chip ${hWhen===k?'on':''}" onclick="hWhen=${typeof k==='number'?k:`'${k}'`};renderHotel()">${l}</button>`).join('');
+  const {tg,di,t,list}=hScored();
+  if(hWhen!=='custom'){$('hDate').value=`${tg.getFullYear()}-${pad(tg.getMonth()+1)}-${pad(tg.getDate())}`;$('hTime').value=hm(tg.getTime());}
+  const dn=`${tg.getMonth()+1}/${tg.getDate()}（${'日月火水木金土'[tg.getDay()]}）`;
+  const tip=di.last?'チェックアウトの波が一番強い日。高級ホテルの11〜12時が狙い目':di.off?'観光客中心。CO時刻の30分前あたりが山':di.after?'休み明けの平日。ビジネス系の朝7〜9時も動きやすい':'平日。ビジネス系は朝7〜9時、高級ホテルはCO前が山';
+  $('hDay').innerHTML=`<b style="color:var(--yellow)">${dn} ${hm(tg.getTime())}</b>　${di.label}<br>${tip}`;
+  // timeline
+  const slots=[];for(let m=360;m<840;m+=30){let s=0;list.forEach(h=>s+=hWin(h,m,di));slots.push([m,s]);}
+  const mx=Math.max(...slots.map(x=>x[1]),1);
+  $('hBars').innerHTML=slots.map(([m,s])=>`<div style="height:${Math.max(2,s/mx*100)}%;${t>=m&&t<m+30?'background:var(--yellow);opacity:1':''}" title="${fromMin(m)}"></div>`).join('');
+  // list
+  const top=Math.max(...list.map(h=>h.score),0.0001);
+  const sorted=list.slice().sort((a,b)=>b.score-a.score);
+  $('hList').innerHTML=sorted.map(h=>{const p=Math.round(h.score/top*100),[st,c]=hStatus(h,t);
+    return `<div class="it" onclick="hotelSheet('${h.id}')" style="cursor:pointer;flex-wrap:wrap">
+      <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:14px">${esc(h.n)}</div>
+      <div class="sub">CO ${esc(h.co)}${h.ok?'':'（目安）'} ・ ${h.rooms||'?'}室 ・ ${h.t==='biz'?'ビジネス':'シティ/高級'}${h.hi.all?` ・ 実績 ${h.hi.n}/${h.hi.all}回`:''}</div></div>
+      <div style="text-align:right;min-width:86px"><div style="font-weight:800;color:${c};font-size:13px">${st}</div><div style="font-family:var(--mono);font-size:12px;color:var(--yellow)">${'★'.repeat(Math.max(1,Math.ceil(p/20)))}</div></div>
+      <div style="flex-basis:100%;height:5px;border-radius:3px;background:var(--card2);margin-top:6px;overflow:hidden"><i style="display:block;height:100%;width:${p}%;background:${c}"></i></div></div>`;}).join('')||'<div class="sub">ホテルがありません</div>';
+  drawHotelMap(sorted,top,t);
+}
+async function drawHotelMap(sorted,top,t){
+  const ok=await loadLeaflet();if(!ok||view!=='hotel')return;
+  if(!hMap){hMap=L.map('hMapBox',{zoomControl:true,attributionControl:false}).setView([35.68,139.73],13);
+    L.tileLayer(MAPSTYLES.pale[1],{maxZoom:18}).addTo(hMap);hLayer=L.layerGroup().addTo(hMap);}
+  setTimeout(()=>hMap.invalidateSize(),60);
+  hLayer.clearLayers();const pts=[];
+  sorted.forEach(h=>{const p=h.score/top,[st,c]=hStatus(h,t);const col=st==='終了'?'#6b7280':p>.66?'#ff5a00':p>.33?'#f5a524':'#16a34a';
+    L.circleMarker([h.lat,h.lng],{radius:6+p*10,color:'#111',weight:1,fillColor:col,fillOpacity:.85}).addTo(hLayer)
+      .bindTooltip(`${h.n.replace(/[<>&]/g,'')} ${h.co}`,{direction:'top'}).on('click',()=>hotelSheet(h.id));pts.push([h.lat,h.lng]);});
+  const key=(D.settings.hArea||'all');if(hMap._fitKey!==key&&pts.length){hMap.fitBounds(pts,{padding:[24,24],maxZoom:15});hMap._fitKey=key;}
+}
+function hotelSheet(id){const h=hotels().find(x=>x.id===id);if(!h)return;const {t,di}=hScored();const hi=hHist(h,t,di.off);
+  sheet(`<div class="ttl">${esc(h.n)}</div>
+  <div class="sub" style="margin:6px 0 10px">${h.ok?'チェックアウト時刻は予約サイト等で確認済み':'チェックアウト時刻は目安です。正しい時刻に直してください'}<br>自分の実績：このホテル付近で乗車 ${hi.all}回（同じ曜日タイプ・前後45分で ${hi.n}回${hi.n?'、平均 '+yen(hi.fare/hi.n):''}）</div>
+  <div class="grid2"><label class="sub">チェックアウト<input type="time" id="hoCo" value="${esc(h.co)}"></label><label class="sub">部屋数<input type="number" id="hoRooms" value="${h.rooms||''}"></label></div>
+  <div class="sel chips" id="hoT" style="margin-top:8px"><button class="chip ${h.t!=='biz'?'on':''}" onclick="this.parentNode.dataset.v='lux';this.classList.add('on');this.nextElementSibling.classList.remove('on')">シティ/高級</button><button class="chip ${h.t==='biz'?'on':''}" onclick="this.parentNode.dataset.v='biz';this.classList.add('on');this.previousElementSibling.classList.remove('on')">ビジネス</button></div>
+  <button class="btn g full" style="margin-top:12px" onclick="hotelSave('${h.id}')">保存</button>
+  <div class="grid2" style="margin-top:10px"><button class="btn" onclick="hotelHere('${h.id}')">📍 位置を現在地に</button><a class="btn" style="text-align:center;text-decoration:none" target="_blank" href="https://www.google.com/maps/search/?api=1&query=${h.lat},${h.lng}">Googleマップ</a></div>
+  <div class="grid2" style="margin-top:10px"><button class="btn r" onclick="hotelHide('${h.id}')">${String(h.id).startsWith('u_')?'削除':'非表示'}</button><button class="btn" onclick="closeSheet()">閉じる</button></div>`);}
+function hotelPatch(id,o){if(String(id).startsWith('u_')){const a=D.settings.hotelAdd||[];const x=a.find(v=>v.id===id);if(x)Object.assign(x,o);}else{D.settings.hotelOv=D.settings.hotelOv||{};D.settings.hotelOv[id]=Object.assign({},D.settings.hotelOv[id]||{},o);}save();}
+function hotelSave(id){const o={co:$('hoCo').value||'11:00',rooms:+$('hoRooms').value||200,ok:1};const v=$('hoT').dataset.v;if(v)o.t=v;hotelPatch(id,o);closeSheet();renderHotel();toast('保存しました');}
+function hotelHere(id){getPos().then(p=>{if(!p){toast('位置を取得できません');return;}hotelPatch(id,{lat:p.lat,lng:p.lng});if(hMap)hMap._fitKey=null;closeSheet();renderHotel();toast('位置を更新しました');});}
+function hotelHide(id){if(String(id).startsWith('u_'))D.settings.hotelAdd=(D.settings.hotelAdd||[]).filter(x=>x.id!==id);else hotelPatch(id,{hide:true});save();closeSheet();renderHotel();}
+function hotelAdd(){getPos().then(p=>{if(!p){toast('位置を取得できません');return;}
+  const ar=D.settings.hArea&&D.settings.hArea!=='all'?D.settings.hArea:(hDist(p,{lat:35.69,lng:139.70})<hDist(p,{lat:35.671,lng:139.765})?'shinjuku':'ginza');
+  const h={id:'u_'+uid(),a:ar,n:'新しいホテル',lat:p.lat,lng:p.lng,co:'11:00',rooms:200,t:'biz',ok:0};
+  sheet(`<div class="ttl">ホテルを追加（現在地）</div><label class="sub" style="display:block;margin-top:10px">名前<input id="haN" placeholder="ホテル名"></label>
+  <div class="grid2" style="margin-top:8px"><label class="sub">チェックアウト<input type="time" id="haCo" value="11:00"></label><label class="sub">部屋数<input type="number" id="haR" value="200"></label></div>
+  <button class="btn g full" style="margin-top:12px" id="haOk">追加</button><button class="btn full" style="margin-top:8px" onclick="closeSheet()">やめる</button>`);
+  $('haOk').onclick=()=>{h.n=$('haN').value.trim()||'ホテル';h.co=$('haCo').value||'11:00';h.rooms=+$('haR').value||200;h.ok=1;D.settings.hotelAdd=(D.settings.hotelAdd||[]).concat([h]);save();closeSheet();if(hMap)hMap._fitKey=null;renderHotel();toast('追加しました');};});}
+$('hDate').onchange=$('hTime').onchange=()=>{hWhen='custom';renderHotel();};
+setInterval(()=>{if(view==='hotel'&&hWhen!=='custom'&&$('modal').classList.contains('hide'))renderHotel();},60000);
 /* ============ nav ============ */
 let view='home';
-function go(v){view=v;['home','spot','report','map','ana','set'].forEach(x=>$('v-'+x).classList.toggle('hide',x!==v));
+function go(v){view=v;['home','spot','hotel','report','map','ana','set'].forEach(x=>$('v-'+x).classList.toggle('hide',x!==v));
   document.querySelectorAll('nav.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.go===v));
-  if(v==='report')renderReport();if(v==='spot')renderSpots();if(v==='ana')renderAna();if(v==='set')fillSet();
+  if(v==='report')renderReport();if(v==='spot')renderSpots();if(v==='hotel')renderHotel();if(v==='ana')renderAna();if(v==='set')fillSet();
   if(v==='map'){renderMapCtl();initMap().then(ok=>{if(ok)setTimeout(()=>{map.invalidateSize();drawMap();},80);});}
   window.scrollTo(0,0);}
 document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>go(b.dataset.go));
