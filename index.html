@@ -1059,17 +1059,18 @@ WARDS.forEach(w=>{let A=0,X=0,Y=0;const r=w.r.reduce((a,b)=>b.length>a.length?b:
 function wardOf(p,a){if(p&&p.lat){for(const w of WARDS){if(p.lat<w.b[0]||p.lat>w.b[2]||p.lng<w.b[1]||p.lng>w.b[3])continue;
     for(const r of w.r){let ins=false;for(let i=0,j=r.length-1;i<r.length;j=i++){const[yi,xi]=r[i],[yj,xj]=r[j];if(((yi>p.lat)!==(yj>p.lat))&&(p.lng<(xj-xi)*(p.lat-yi)/(yj-yi)+xi))ins=!ins;}if(ins)return w.n;}}}
   if(a&&a.w){const w=WARDS.find(w=>String(a.w).includes(w.n));if(w)return w.n;}return null;}
-let wmBand='all',wmMet='cnt',wmSel=null;
-const WM_BANDS=[['all','全日'],['0','5〜9時'],['1','9〜13時'],['2','13〜17時'],['3','17〜21時'],['4','21〜25時'],['5','25〜29時']];
+let wmBand='all',wmMet='cnt',wmSel=null,wmFrom=9,wmTo=13;
+const WM_BANDS=[['all','全日'],['0','5〜9時'],['1','9〜13時'],['2','13〜17時'],['3','17〜21時'],['4','21〜25時'],['5','25〜29時'],['cus','時間指定']];
 function renderWardMap(RS){
-  $('wmBand').innerHTML=WM_BANDS.map(([k,l])=>`<button class="chip ${wmBand===k?'on':''}" onclick="wmBand='${k}';renderAna()">${l}</button>`).join('');
+  $('wmBand').innerHTML=WM_BANDS.map(([k,l])=>`<button class="chip ${wmBand===k?'on':''}" onclick="wmBand='${k}';renderAna()">${l}</button>`).join('')
+    +(wmBand==='cus'?`<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;width:100%;margin-top:6px"><select onchange="wmFrom=+this.value;if(wmTo<=wmFrom)wmTo=wmFrom+1;renderAna()">${Array.from({length:24},(_,i)=>i+5).map(h=>`<option value="${h}" ${h===wmFrom?'selected':''}>${h}時</option>`).join('')}</select><span>〜</span><select onchange="wmTo=+this.value;if(wmTo<=wmFrom)wmFrom=wmTo-1;renderAna()">${Array.from({length:24},(_,i)=>i+6).map(h=>`<option value="${h}" ${h===wmTo?'selected':''}>${h}時</option>`).join('')}</select><span class="sub" style="width:100%">25時＝翌1時、29時＝翌5時</span></div>`:'');
   $('wmMet').innerHTML=[['cnt','回数'],['avg','平均単価'],['sum','売上合計']].map(([k,l])=>`<button class="chip ${wmMet===k?'on':''}" onclick="wmMet='${k}';renderAna()">${l}</button>`).join('');
   const agg={};let out=0,tot=0;
   RS.forEach(r=>{let t,p,a,fare,ok;
     if(aAxis==='call'){if(r.kind!=='app'||!r.callAt)return;t=r.callAt;p=r.callPos;a=r.callArea;ok=!r.cancelled;fare=ok?(r.fare||0):0;}
     else if(aAxis==='pick'){if(!done(r))return;t=r.pickAt;p=r.pickPos;a=r.pickArea;fare=r.fare||0;ok=true;}
     else{if(!done(r))return;t=r.dropAt;p=r.dropPos;a=r.dropArea;fare=r.fare||0;ok=true;}
-    const h=new Date(t).getHours(),bd=String(Math.floor(((h-5+24)%24)/4));if(wmBand!=='all'&&bd!==wmBand)return;
+    const h=new Date(t).getHours(),bd=String(Math.floor(((h-5+24)%24)/4));if(wmBand==='cus'){const hh=h<5?h+24:h;if(hh<wmFrom||hh>=wmTo)return;}else if(wmBand!=='all'&&bd!==wmBand)return;
     tot++;const n=wardOf(p,a);if(!n){out++;return;}
     const o=agg[n]=agg[n]||{c:0,s:0,n:0};o.c++;o.s+=fare;if(ok&&fare)o.n++;});
   const val=o=>!o?0:wmMet==='cnt'?o.c:wmMet==='sum'?exTax(o.s):(o.n?exTax(o.s/o.n):0);
